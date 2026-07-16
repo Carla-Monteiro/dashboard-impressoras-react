@@ -89,17 +89,12 @@ function Contadores({ dados, carregando, erro }) {
 
   const datasDisponiveis = dados[0]?.datas || [];
   
-  // Mostra sempre os últimos 2 dias
-  const indicesVisiveis = [
-    Math.max(0, datasDisponiveis.length - 2),
-    Math.max(0, datasDisponiveis.length - 1)
-  ].filter(i => datasDisponiveis[i]);
-
-  const colunasVisiveis = indicesVisiveis.map(i => ({ indice: i, data: datasDisponiveis[i] }));
+  // Mostra TODAS as datas disponíveis
+  const colunasVisiveis = datasDisponiveis.map((data, i) => ({ indice: i, data }));
 
   return (
     <div className="aba">
-      <h2>Histórico de Contadores - Últimos 2 Dias</h2>
+      <h2>Histórico de Contadores</h2>
 
       <table className="tabela">
         <thead>
@@ -107,7 +102,7 @@ function Contadores({ dados, carregando, erro }) {
             <th>Setor</th>
             <th>IP</th>
             <th>Marca / Modelo</th>
-            {colunasVisiveis.map(col => (<th key={col.indice}>{col.data}</th>))}
+            {colunasVisiveis.map((col, idx) => (<th key={`date-${idx}`}>{col.data}</th>))}
             <th style={{ textAlign: 'right' }}>Status</th>
           </tr>
         </thead>
@@ -117,8 +112,8 @@ function Contadores({ dados, carregando, erro }) {
               <td>{p.setor}</td>
               <td className="codigo">{p.ip}</td>
               <td>{p.marca} {p.modelo}</td>
-              {colunasVisiveis.map(col => (
-                <td key={col.indice} className="numero">
+              {colunasVisiveis.map((col, idx) => (
+                <td key={`val-${idx}`} className="numero">
                   {p.contadores[col.indice] ? p.contadores[col.indice].toLocaleString('pt-BR') : '—'}
                 </td>
               ))}
