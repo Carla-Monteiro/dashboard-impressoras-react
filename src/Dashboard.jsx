@@ -12,7 +12,6 @@ function Monitoramento({ dados, carregando, erro }) {
   const filtrada = dados.filter((p) => {
     if (filtro === 'online') return p.online;
     if (filtro === 'offline') return !p.online;
-    if (filtro === 'sem-toner') return p.toners.length === 0;
     return true;
   });
 
@@ -70,6 +69,7 @@ function Monitoramento({ dados, carregando, erro }) {
             <th>Setor</th>
             <th>IP</th>
             <th>Marca / Modelo</th>
+            <th>Série</th>
             <th>Toner</th>
             <th>Contador</th>
             <th>Última Leitura</th>
@@ -84,6 +84,7 @@ function Monitoramento({ dados, carregando, erro }) {
               <td>
                 {p.marca} {p.modelo}
               </td>
+              <td className="codigo pequeno">{p.serie || '—'}</td>
               <td>{p.toner || '—'}</td>
               <td className="numero">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
               <td className="pequeno">{p.data_leitura || '—'}</td>
@@ -117,6 +118,7 @@ function Contadores({ dados, carregando, erro }) {
             <th>Setor</th>
             <th>IP</th>
             <th>Marca / Modelo</th>
+            <th>Série</th>
             <th>Última Leitura</th>
             <th>Contador</th>
             <th>Status</th>
@@ -130,6 +132,7 @@ function Contadores({ dados, carregando, erro }) {
               <td>
                 {p.marca} {p.modelo}
               </td>
+              <td className="codigo pequeno">{p.serie || '—'}</td>
               <td>{p.data_leitura || '—'}</td>
               <td className="numero">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
               <td className="status">
