@@ -57,12 +57,15 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      // Estrutura: A=Setor, B=Nome, C=IP, D=Marca, E=Modelo, F+=Datas com contadores
-      // Pega as colunas de data (F em diante = índice 5)
+      // Cabeçalho da planilha: Setor, Nome, IP, Marca, Modelo, [datas...]
+      // Índices: 0=Setor, 1=Nome, 2=IP, 3=Marca, 4=Modelo, 5+=DATAS
       const datasRaw = linhas[0].slice(5);
-      const datas = datasRaw.filter(d => d && String(d).trim()).map(d => String(d).trim());
+      const datas = datasRaw
+        .filter(d => d !== undefined && d !== null && String(d).trim() !== '')
+        .map(d => String(d).trim());
 
       dados = dados.map((o) => {
+        // Para cada data, pega o valor da coluna correspondente
         const contadores = datas.map(data => {
           const chaveData = chave(data);
           const val = o[chaveData];
