@@ -128,9 +128,8 @@ function Contadores({ dados, carregando, erro }) {
             <th>Setor</th>
             <th>IP</th>
             <th>Marca / Modelo</th>
-            <th>Série</th>
             {colunasVisiveis.map(col => (<th key={col.indice}>{col.data}</th>))}
-            <th>Status</th>
+            <th style={{ textAlign: 'right' }}>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -139,7 +138,6 @@ function Contadores({ dados, carregando, erro }) {
               <td>{p.setor}</td>
               <td className="codigo">{p.ip}</td>
               <td>{p.marca} {p.modelo}</td>
-              <td className="codigo pequeno">{p.serie || '—'}</td>
               {colunasVisiveis.map(col => (
                 <td key={col.indice} className="numero">
                   {p.contadores[col.indice] ? p.contadores[col.indice].toLocaleString('pt-BR') : '—'}
@@ -171,9 +169,9 @@ function Estoque({ estoque, carregando, erro, repor }) {
           <tr>
             <th>Fabricante</th>
             <th>Modelo</th>
-            <th>Estoque Atual</th>
-            <th>Mínimo</th>
-            <th>Status</th>
+            <th style={{ textAlign: 'right' }}>Estoque Atual</th>
+            <th style={{ textAlign: 'right' }}>Mínimo</th>
+            <th style={{ textAlign: 'right' }}>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -185,7 +183,7 @@ function Estoque({ estoque, carregando, erro, repor }) {
                 <td>{e.modelo_toner}</td>
                 <td className="numero"><strong>{e.estoque_atual}</strong></td>
                 <td className="numero">{e.minimo_estipulado}</td>
-                <td className={precisa ? 'repor' : 'ok'}>{precisa ? '🔴 REPOR' : '✓ OK'}</td>
+                <td className={precisa ? 'repor' : 'ok'} style={{ textAlign: 'right' }}>{precisa ? '🔴 REPOR' : '✓ OK'}</td>
               </tr>
             );
           })}
@@ -250,8 +248,8 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
         <thead>
           <tr>
             <th>Toner</th>
-            <th>Saldo</th>
-            <th>Impressoras Usando</th>
+            <th style={{ textAlign: 'right' }}>Saldo</th>
+            <th style={{ textAlign: 'right' }}>Impressoras Usando</th>
             <th>Criticidade</th>
           </tr>
         </thead>
@@ -264,7 +262,7 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
               <tr key={i} className={critico ? 'critico' : ''}>
                 <td>{item.toner.modelo_toner}</td>
                 <td className={`numero ${saldo <= 2 ? 'baixo' : ''}`}>{saldo}</td>
-                <td>{impressoras}</td>
+                <td className="numero">{impressoras}</td>
                 <td>{critico ? '🔴 CRÍTICO' : impressoras >= 5 ? '🟡 ALTO' : '🟢 BAIXO'}</td>
               </tr>
             );
@@ -292,7 +290,7 @@ function Movimentacoes({ movimentacoes, carregando, erro }) {
               <th>Data / Hora</th>
               <th>Tipo</th>
               <th>Toner</th>
-              <th>Quantidade</th>
+              <th style={{ textAlign: 'right' }}>Quantidade</th>
               <th>Responsável / Setor</th>
             </tr>
           </thead>
