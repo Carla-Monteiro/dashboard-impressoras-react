@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const BASE = '/api/sheets';
 
-const TOKEN = process.env.REACT_APP_API_TOKEN;
+
 
 async function listar(aba) {
   const res = await fetch(`${BASE}?aba=${aba}`);
