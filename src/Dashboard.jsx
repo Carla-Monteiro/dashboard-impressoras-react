@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDashboard } from './services/sheetsApi';
-import './Dashboard.css';
+import './App.css';
 
 // Componente de Monitoramento
 function Monitoramento({ dados, carregando, erro }) {
