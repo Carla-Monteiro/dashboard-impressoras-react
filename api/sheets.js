@@ -57,22 +57,28 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      // Cabeçalho da planilha: Setor, Nome, IP, Marca, Modelo, [datas...]
-      // Índices: 0=Setor, 1=Nome, 2=IP, 3=Marca, 4=Modelo, 5+=DATAS
-      const datasRaw = linhas[0].slice(5);
-      const datas = datasRaw
-        .filter(d => d !== undefined && d !== null && String(d).trim() !== '')
-        .map(d => String(d).trim());
+      // Cabeçalho tem: Setor (0), Nome (1), IP (2), Marca (3), Modelo (4), [Datas a partir de 5]
+      // Pega TODAS as colunas a partir da coluna 5
+      const colunas = linhas[0].slice(5);
+      
+      // Pega TODAS as datas do cabeçalho (mesmo que vazias depois)
+      // Filtra apenas as que têm conteúdo
+      const datas = colunas
+        .map((d, idx) => {
+          const txt = String(d ?? '').trim();
+          return txt ? { indice: idx + 5, data: txt } : null;
+        })
+        .filter(d => d !== null);
 
       dados = dados.map((o) => {
-        // Para cada data, pega o valor da coluna correspondente
-        const contadores = datas.map(data => {
-          const chaveData = chave(data);
+        // Para cada data, pega o valor correspondente
+        const contadores = datas.map(d => {
+          const chaveData = chave(d.data);
           const val = o[chaveData];
           return typeof val === 'number' ? val : null;
         });
 
-        const ultimaData = datas.length > 0 ? datas[datas.length - 1] : '';
+        const ultimaDati = datas.length > 0 ? datas[datas.length - 1].data : '';
         const ultimoNumero = contadores.length > 0 ? contadores[contadores.length - 1] : null;
 
         return {
@@ -82,9 +88,9 @@ module.exports = async function handler(req, res) {
           ip: o.ip || '',
           marca: o.marca || '',
           modelo: o.modelo || '',
-          datas: datas,
+          datas: datas.map(d => d.data),
           contadores: contadores,
-          data_leitura: ultimaData,
+          data_leitura: ultimaDati,
           contador: ultimoNumero,
           online: ultimoNumero !== null,
           falha: ultimoNumero === null ? 'Erro: tempo esgotado (offline?)' : null,
