@@ -57,18 +57,21 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      // Pega as colunas de data (a partir da coluna 5)
-      const colunas_datas = linhas[0].slice(5);
-      const datas = colunas_datas.filter(d => d && String(d).trim()).map(d => String(d).trim());
+      // Extrai as datas da primeira linha (colunas 5 em diante = Setor, Nome, IP, Marca, Modelo, [datas...]
+      const datasRaw = linhas[0].slice(5);
+      const datas = datasRaw.filter(d => d && String(d).trim()).map(d => String(d).trim());
 
       dados = dados.map((o) => {
+        // Monta array de contadores para cada data
         const contadores = datas.map(data => {
-          const val = o[chave(data)];
+          const chaveData = chave(data);
+          const val = o[chaveData];
           return typeof val === 'number' ? val : null;
         });
 
-        const ultima_data = datas[datas.length - 1];
-        const numero = contadores[contadores.length - 1];
+        // Última data e número
+        const ultimaData = datas.length > 0 ? datas[datas.length - 1] : '';
+        const ultimoNumero = contadores.length > 0 ? contadores[contadores.length - 1] : null;
 
         return {
           _row: o._row,
@@ -79,10 +82,10 @@ module.exports = async function handler(req, res) {
           serie: o.serie || '',
           datas: datas,
           contadores: contadores,
-          data_leitura: ultima_data,
-          contador: numero,
-          online: numero !== null,
-          falha: numero === null ? 'Erro: tempo esgotado (offline?)' : null,
+          data_leitura: ultimaData,
+          contador: ultimoNumero,
+          online: ultimoNumero !== null,
+          falha: ultimoNumero === null ? 'Erro: tempo esgotado (offline?)' : null,
         };
       });
     }
