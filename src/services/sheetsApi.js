@@ -86,6 +86,8 @@ export function useDashboard({ intervalo } = {}) {
           online: c ? c.online : false,
           falha: c ? c.falha : 'sem leitura',
           historico: c ? c.historico : [],
+          datas: c ? c.datas : [],
+          contadores: c ? c.contadores : [],
         };
       }),
     [imp.dados, porFamilia, porIp]
