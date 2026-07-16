@@ -70,9 +70,8 @@ function Monitoramento({ dados, carregando, erro }) {
             <th>IP</th>
             <th>Marca / Modelo</th>
             <th>Série</th>
-            <th>Toner</th>
-            <th>Contador</th>
-            <th>Última Leitura</th>
+                        
+            
             <th>Status</th>
           </tr>
         </thead>
@@ -133,8 +132,8 @@ function Contadores({ dados, carregando, erro }) {
                 {p.marca} {p.modelo}
               </td>
               <td className="codigo pequeno">{p.serie || '—'}</td>
-              <td>{p.data_leitura || '—'}</td>
-              <td className="numero">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
+             
+              
               <td className="status">
                 {p.online ? (
                   <span className="online">● Online</span>
