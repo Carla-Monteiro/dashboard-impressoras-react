@@ -57,28 +57,24 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      // Cabeçalho tem: Setor (0), Nome (1), IP (2), Marca (3), Modelo (4), [Datas a partir de 5]
-      // Pega TODAS as colunas a partir da coluna 5
-      const colunas = linhas[0].slice(5);
+      // Pega TODAS as colunas a partir de F (índice 5)
+      // Estrutura: A=Setor, B=Nome, C=IP, D=Marca, E=Modelo, F+=Datas
+      const todasAsColunas = linhas[0].slice(5);
       
-      // Pega TODAS as datas do cabeçalho (mesmo que vazias depois)
-      // Filtra apenas as que têm conteúdo
-      const datas = colunas
-        .map((d, idx) => {
-          const txt = String(d ?? '').trim();
-          return txt ? { indice: idx + 5, data: txt } : null;
-        })
-        .filter(d => d !== null);
+      // TODAS as datas que estão no cabeçalho
+      const datas = todasAsColunas
+        .map(d => String(d ?? '').trim())
+        .filter(d => d !== '');
 
       dados = dados.map((o) => {
-        // Para cada data, pega o valor correspondente
-        const contadores = datas.map(d => {
-          const chaveData = chave(d.data);
+        // Para cada data, pega o valor
+        const contadores = datas.map(data => {
+          const chaveData = chave(data);
           const val = o[chaveData];
           return typeof val === 'number' ? val : null;
         });
 
-        const ultimaDati = datas.length > 0 ? datas[datas.length - 1].data : '';
+        const ultimaData = datas.length > 0 ? datas[datas.length - 1] : '';
         const ultimoNumero = contadores.length > 0 ? contadores[contadores.length - 1] : null;
 
         return {
@@ -88,9 +84,9 @@ module.exports = async function handler(req, res) {
           ip: o.ip || '',
           marca: o.marca || '',
           modelo: o.modelo || '',
-          datas: datas.map(d => d.data),
+          datas: datas,
           contadores: contadores,
-          data_leitura: ultimaDati,
+          data_leitura: ultimaData,
           contador: ultimoNumero,
           online: ultimoNumero !== null,
           falha: ultimoNumero === null ? 'Erro: tempo esgotado (offline?)' : null,
