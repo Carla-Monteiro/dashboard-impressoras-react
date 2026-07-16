@@ -128,12 +128,9 @@ function Contadores({ dados, carregando, erro }) {
             <tr key={i} className={p.online ? '' : 'offline'}>
               <td>{p.setor}</td>
               <td className="codigo">{p.ip}</td>
-              <td>
                 {p.marca} {p.modelo}
               </td>
               <td className="codigo pequeno">{p.serie || '—'}</td>
-             
-              
               <td className="status">
                 {p.online ? (
                   <span className="online">● Online</span>
