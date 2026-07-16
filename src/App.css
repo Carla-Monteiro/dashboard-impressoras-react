@@ -262,7 +262,7 @@ body {
 .tabela .status {
   text-align: right;
   font-weight: 500;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .status .online {

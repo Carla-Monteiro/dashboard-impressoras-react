@@ -57,19 +57,24 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      // Extrai as datas da primeira linha (colunas 5 em diante = Setor, Nome, IP, Marca, Modelo, [datas...]
+      // Pega TODAS as colunas da primeira linha menos os 5 primeiros (Setor, Nome, IP, Marca, Modelo)
       const datasRaw = linhas[0].slice(5);
-      const datas = datasRaw.filter(d => d && String(d).trim()).map(d => String(d).trim());
+      
+      // Filtra apenas as que têm conteúdo e formata como string
+      const datas = datasRaw
+        .filter(d => d !== undefined && d !== null && d !== '')
+        .map(d => String(d).trim())
+        .filter(d => d !== '');
 
       dados = dados.map((o) => {
-        // Monta array de contadores para cada data
+        // Para cada data, pega o valor do contador
         const contadores = datas.map(data => {
           const chaveData = chave(data);
           const val = o[chaveData];
           return typeof val === 'number' ? val : null;
         });
 
-        // Última data e número
+        // Pega a última data e número
         const ultimaData = datas.length > 0 ? datas[datas.length - 1] : '';
         const ultimoNumero = contadores.length > 0 ? contadores[contadores.length - 1] : null;
 
