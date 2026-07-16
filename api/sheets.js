@@ -24,6 +24,7 @@ const ABAS = {
   impressoras: 'Mapeamento Impressoras',
   estoque: 'Estoque Atual',
   contadores: 'Contadores Diários',
+  movimentacoes: 'Respostas ao formulário 2',
 };
 
 function chave(texto) {

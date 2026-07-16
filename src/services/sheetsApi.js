@@ -121,4 +121,38 @@ export function useDashboard({ intervalo } = {}) {
     erro: imp.erro || est.erro || cnt.erro,
     recarregar: () => Promise.all([imp.recarregar(), est.recarregar(), cnt.recarregar()]),
   };
-}
+  export function useMovimentacoes({ intervalo } = {}) {
+  const [dados, setDados] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  const recarregar = useCallback(async () => {
+    try {
+      setErro(null);
+      const mov = await listar('movimentacoes');
+      const formatado = mov.map((m) => ({
+        data: m.carimbo_de_data_hora || m['carimbo de data/hora'] || '—',
+        tipo: m.tipo_de_movimentacao || m['tipo de movimentacao'] || '—',
+        toner: m.modelo_do_toner || m['modelo do toner'] || '—',
+        quantidade: m.quantidade || '—',
+        responsavel: m.responsavel_e_setor_de_destino || m['responsavel e setor de destino'] || '—',
+      }));
+      setDados(formatado);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    const rodar = () => { if (vivo) recarregar(); };
+    rodar();
+    if (!intervalo) return () => { vivo = false; };
+    const id = setInterval(rodar, intervalo);
+    return () => { vivo = false; clearInterval(id); };
+  }, [recarregar, intervalo]);
+
+  return { dados, carregando, erro, recarregar };
+  }

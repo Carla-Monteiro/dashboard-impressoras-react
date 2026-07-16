@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useDashboard } from './services/sheetsApi';
+import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import './App.css';
 
 // Componente de Monitoramento
@@ -70,8 +70,6 @@ function Monitoramento({ dados, carregando, erro }) {
             <th>IP</th>
             <th>Marca / Modelo</th>
             <th>Série</th>
-                        
-            
             <th>Status</th>
           </tr>
         </thead>
@@ -84,9 +82,6 @@ function Monitoramento({ dados, carregando, erro }) {
                 {p.marca} {p.modelo}
               </td>
               <td className="codigo pequeno">{p.serie || '—'}</td>
-              <td>{p.toner || '—'}</td>
-              <td className="numero">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
-              <td className="pequeno">{p.data_leitura || '—'}</td>
               <td className="status">
                 {p.online ? (
                   <span className="online">● Online</span>
@@ -128,9 +123,12 @@ function Contadores({ dados, carregando, erro }) {
             <tr key={i} className={p.online ? '' : 'offline'}>
               <td>{p.setor}</td>
               <td className="codigo">{p.ip}</td>
+              <td>
                 {p.marca} {p.modelo}
               </td>
               <td className="codigo pequeno">{p.serie || '—'}</td>
+              <td>{p.data_leitura || '—'}</td>
+              <td className="numero">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
               <td className="status">
                 {p.online ? (
                   <span className="online">● Online</span>
@@ -187,6 +185,40 @@ function Estoque({ estoque, carregando, erro, repor }) {
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Componente de Mapeamento Impressora/Toner
+function Mapeamento({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba">
+      <h2>Mapeamento de Toners por Impressora</h2>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Setor</th>
+            <th>Marca / Modelo</th>
+            <th>Série</th>
+            <th>Toner Compatível</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dados.map((p, i) => (
+            <tr key={i}>
+              <td>{p.setor}</td>
+              <td>
+                {p.marca} {p.modelo}
+              </td>
+              <td className="codigo pequeno">{p.serie || '—'}</td>
+              <td><strong>{p.toner || '—'}</strong></td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -251,37 +283,48 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
 }
 
 // Componente de Movimentações
-function Movimentacoes({ estoque, carregando, erro }) {
+function Movimentacoes({ movimentacoes, carregando, erro }) {
   if (carregando) return <div className="loading">Carregando...</div>;
   if (erro) return <div className="erro">Erro: {erro}</div>;
 
   return (
     <div className="aba">
-      <h2>Movimentações de Toner</h2>
+      <h2>Histórico de Movimentações (QR Code)</h2>
       <div className="info-box">
-        As movimentações são registradas pelo QR code no armário.
-        <br />
-        <strong>Ao retirar um toner, escaneia o QR code e registra a saída.</strong>
+        Histórico de toners retirados/devolvidos pelo armário via QR code.
       </div>
 
-      <div className="resumo-movimentacoes">
-        <div className="card">
-          <div className="card-numero">16</div>
-          <div className="card-label">Toners em Estoque</div>
+      {movimentacoes.length === 0 ? (
+        <div className="info-box">
+          Nenhuma movimentação registrada ainda.
         </div>
-        <div className="card">
-          <div className="card-numero">{estoque.filter((e) => Number(e.estoque_atual) <= Number(e.minimo_estipulado)).length}</div>
-          <div className="card-label">Precisando Reposição</div>
-        </div>
-        <div className="card">
-          <div className="card-numero">{estoque.reduce((s, e) => s + Number(e.estoque_atual), 0)}</div>
-          <div className="card-label">Unidades Totais</div>
-        </div>
-      </div>
+      ) : (
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Data / Hora</th>
+              <th>Tipo</th>
+              <th>Toner</th>
+              <th>Quantidade</th>
+              <th>Responsável / Setor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {movimentacoes.map((m, i) => (
+              <tr key={i}>
+                <td className="pequeno">{m.data}</td>
+                <td>{m.tipo}</td>
+                <td><strong>{m.toner}</strong></td>
+                <td className="numero">{m.quantidade}</td>
+                <td className="pequeno">{m.responsavel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <p style={{ marginTop: '2rem', color: '#888', fontSize: '0.9rem' }}>
-        📌 <strong>Dica:</strong> Mantenha o link do QR code próximo ao armário de toners.
-        Qualquer pessoa pode registrar uma saída em 20 segundos.
+        📌 <strong>Dica:</strong> As movimentações aparecem aqui 30 segundos depois de serem registradas no QR code.
       </p>
     </div>
   );
@@ -293,13 +336,16 @@ export default function Dashboard() {
   const { impressoras, estoque, repor, carregando, erro, recarregar } = useDashboard({
     intervalo: 60000,
   });
+  const { dados: movimentacoes, carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({
+    intervalo: 30000,
+  });
 
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>📊 Gestão de Impressoras & Toner - UNIFEB TI</h1>
         <div className="header-info">
-          <button onClick={recarregar} className="btn-refresh">
+          <button onClick={() => { recarregar(); movRecarregar(); }} className="btn-refresh">
             🔄 Atualizar
           </button>
           <span className="timestamp">
@@ -320,6 +366,12 @@ export default function Dashboard() {
           onClick={() => setAbaAtiva('contadores')}
         >
           📈 Contadores
+        </button>
+        <button
+          className={abaAtiva === 'mapeamento' ? 'ativo' : ''}
+          onClick={() => setAbaAtiva('mapeamento')}
+        >
+          🔗 Mapeamento
         </button>
         <button
           className={abaAtiva === 'estoque' ? 'ativo' : ''}
@@ -348,6 +400,9 @@ export default function Dashboard() {
         {abaAtiva === 'contadores' && (
           <Contadores dados={impressoras} carregando={carregando} erro={erro} />
         )}
+        {abaAtiva === 'mapeamento' && (
+          <Mapeamento dados={impressoras} carregando={carregando} erro={erro} />
+        )}
         {abaAtiva === 'estoque' && (
           <Estoque estoque={estoque} repor={repor} carregando={carregando} erro={erro} />
         )}
@@ -355,7 +410,7 @@ export default function Dashboard() {
           <VidaToner impressoras={impressoras} estoque={estoque} carregando={carregando} erro={erro} />
         )}
         {abaAtiva === 'movimentacoes' && (
-          <Movimentacoes estoque={estoque} carregando={carregando} erro={erro} />
+          <Movimentacoes movimentacoes={movimentacoes} carregando={movCarregando} erro={movErro} />
         )}
       </main>
     </div>
