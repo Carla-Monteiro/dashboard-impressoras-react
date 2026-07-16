@@ -83,44 +83,23 @@ function Monitoramento({ dados, carregando, erro }) {
 }
 
 function Contadores({ dados, carregando, erro }) {
-  const [indiceData, setIndiceData] = useState(0);
-  
   if (carregando) return <div className="loading">Carregando...</div>;
   if (erro) return <div className="erro">Erro: {erro}</div>;
   if (!dados.length) return <div className="loading">Sem dados de contadores</div>;
 
   const datasDisponiveis = dados[0]?.datas || [];
+  
+  // Mostra sempre os últimos 2 dias
   const indicesVisiveis = [
-    Math.max(0, datasDisponiveis.length - 2 - indiceData),
-    Math.max(0, datasDisponiveis.length - 1 - indiceData)
+    Math.max(0, datasDisponiveis.length - 2),
+    Math.max(0, datasDisponiveis.length - 1)
   ].filter(i => datasDisponiveis[i]);
 
   const colunasVisiveis = indicesVisiveis.map(i => ({ indice: i, data: datasDisponiveis[i] }));
 
   return (
     <div className="aba">
-      <h2>Histórico de Contadores</h2>
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: '#9ca3af', marginRight: '1rem' }}>Selecione o período:</label>
-        <select 
-          value={indiceData} 
-          onChange={(e) => setIndiceData(Number(e.target.value))}
-          style={{
-            padding: '0.5rem',
-            borderRadius: '0.375rem',
-            backgroundColor: '#1a1f26',
-            color: '#e5e7eb',
-            border: '1px solid #374151',
-            cursor: 'pointer'
-          }}
-        >
-          {datasDisponiveis.map((data, i) => (
-            <option key={i} value={datasDisponiveis.length - 2 - i}>
-              {datasDisponiveis.length - 1 - i === 0 ? 'Hoje' : `${datasDisponiveis.length - 1 - i} dia(s) atrás`} ({data})
-            </option>
-          ))}
-        </select>
-      </div>
+      <h2>Histórico de Contadores - Últimos 2 Dias</h2>
 
       <table className="tabela">
         <thead>
