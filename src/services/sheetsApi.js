@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const BASE = '/api/sheets';
 
-
-
 async function listar(aba) {
   const res = await fetch(`${BASE}?aba=${aba}`);
   const corpo = await res.json().catch(() => ({}));
@@ -121,7 +119,9 @@ export function useDashboard({ intervalo } = {}) {
     erro: imp.erro || est.erro || cnt.erro,
     recarregar: () => Promise.all([imp.recarregar(), est.recarregar(), cnt.recarregar()]),
   };
-  export function useMovimentacoes({ intervalo } = {}) {
+}
+
+export function useMovimentacoes({ intervalo } = {}) {
   const [dados, setDados] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
@@ -155,4 +155,4 @@ export function useDashboard({ intervalo } = {}) {
   }, [recarregar, intervalo]);
 
   return { dados, carregando, erro, recarregar };
-  }
+}
