@@ -57,13 +57,18 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.query.aba === 'contadores') {
-      const datas = linhas[0].slice(5).map((d) => String(d));
-      const ultimasDatas = datas.slice(-7);
+      // Pega as colunas de data (a partir da coluna 5)
+      const colunas_datas = linhas[0].slice(5);
+      const datas = colunas_datas.filter(d => d && String(d).trim()).map(d => String(d).trim());
 
       dados = dados.map((o) => {
-        const ultimaDia = ultimasDatas[ultimasDatas.length - 1];
-        const bruto = o[chave(ultimaDia)];
-        const numero = typeof bruto === 'number' ? bruto : null;
+        const contadores = datas.map(data => {
+          const val = o[chave(data)];
+          return typeof val === 'number' ? val : null;
+        });
+
+        const ultima_data = datas[datas.length - 1];
+        const numero = contadores[contadores.length - 1];
 
         return {
           _row: o._row,
@@ -72,15 +77,12 @@ module.exports = async function handler(req, res) {
           marca: o.marca || '',
           modelo: o.modelo || '',
           serie: o.serie || '',
-          datas: ultimasDatas,
-          contadores: ultimasDatas.map(d => {
-            const val = o[chave(d)];
-            return typeof val === 'number' ? val : null;
-          }),
-          data_leitura: ultimaDia,
+          datas: datas,
+          contadores: contadores,
+          data_leitura: ultima_data,
           contador: numero,
           online: numero !== null,
-          falha: numero === null ? String(bruto || 'sem leitura') : null,
+          falha: numero === null ? 'Erro: tempo esgotado (offline?)' : null,
         };
       });
     }

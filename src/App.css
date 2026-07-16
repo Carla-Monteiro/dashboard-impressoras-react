@@ -260,8 +260,9 @@ body {
 }
 
 .tabela .status {
-  text-align: center;
+  text-align: right;
   font-weight: 500;
+  vertical-align: middle;
 }
 
 .status .online {
