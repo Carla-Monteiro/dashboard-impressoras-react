@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
   LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
   ArrowDownCircle, ArrowUpCircle, PlusCircle, PackageX,
-  Droplet, Clock, ChevronDown, ChevronRight, useDashboard, useMovimentacoes } from './services/sheetsApi';
+  Droplet, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import './App.css';
 
 function Monitoramento({ dados, carregando, erro }) {
