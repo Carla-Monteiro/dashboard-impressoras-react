@@ -228,8 +228,6 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
     });
   }
 
-  const analise = Array.from(porToner.values()).sort((a, b) => b.impressoras.length - a.impressoras.length);
-
   const RENDIMENTO = {
     'TK-322': 15000, 'TK-1175': 12000, 'TK-1147': 7200, 'TK-3122': 21000,
     'GPR-22': 8400, 'GPR-31 BLACK': 19000, 'GPR-31 CYAN': 19000,
