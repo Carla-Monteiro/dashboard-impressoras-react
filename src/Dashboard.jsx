@@ -3,16 +3,10 @@ import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import './App.css';
 
 function Monitoramento({ dados, carregando, erro }) {
-  const [filtro, setFiltro] = useState('todos');
-
   if (carregando) return <div className="loading">Carregando...</div>;
   if (erro) return <div className="erro">Erro: {erro}</div>;
 
-  const filtrada = dados.filter((p) => {
-    if (filtro === 'online') return p.online;
-    if (filtro === 'offline') return !p.online;
-    return true;
-  });
+  const filtrada = dados;
 
   return (
     <div className="aba-conteudo">
@@ -63,18 +57,6 @@ function Monitoramento({ dados, carregando, erro }) {
             <div className="status-item-label">Com Erro</div>
           </div>
         </div>
-      </div>
-
-      <div className="filtros-secao">
-        <button className={`filtro-btn ${filtro === 'todos' ? 'ativo' : ''}`} onClick={() => setFiltro('todos')}>
-          Todos ({dados.length})
-        </button>
-        <button className={`filtro-btn ${filtro === 'online' ? 'ativo' : ''}`} onClick={() => setFiltro('online')}>
-          Online ({dados.filter((p) => p.online).length})
-        </button>
-        <button className={`filtro-btn ${filtro === 'offline' ? 'ativo' : ''}`} onClick={() => setFiltro('offline')}>
-          Offline ({dados.filter((p) => !p.online).length})
-        </button>
       </div>
 
       <div className="tabela-container">
