@@ -50,15 +50,7 @@ function Monitoramento({ dados, carregando, erro }) {
             <div className="status-item-label">Offline</div>
           </div>
         </div>
-        <div className="status-item">
-          <div className="status-item-icon">⚠️</div>
-          <div className="status-item-content">
-            <div className="status-item-numero">{dados.filter((p) => p.falha).length}</div>
-            <div className="status-item-label">Com Erro</div>
-          </div>
-        </div>
-      </div>
-
+        
       <div className="tabela-container">
         <table className="tabela-moderna">
           <thead>
