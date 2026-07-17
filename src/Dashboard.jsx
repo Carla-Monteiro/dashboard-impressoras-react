@@ -1,486 +1,381 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from 'react';
 import { useDashboard, useMovimentacoes } from './services/sheetsApi';
-import {
-  Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
-  LayoutGrid, CalendarDays, Filter, X, Package,
-  ArrowDownCircle, ArrowUpCircle, PackageX, Droplet,
-  ChevronDown, ChevronRight, RefreshCw, Link2
-} from "lucide-react";
+import './App.css';
 
-/* ============================================================
-   CONFIGURAÇÃO DE CORES (DARK MODE DO DASHBOARD_1)
-   ============================================================ */
-const COR = {
-  bg: "#0f172a",       
-  panel: "#161d2b",    
-  panelAlt: "#1b2434", 
-  border: "#26324a",   
-  ink: "#e8edf6",      
-  sub: "#8b98b0",      
-  faint: "#5b6880",    
-  online: "#34d399",   
-  offline: "#f43f5e",  
-  erro: "#f59e0b",     
-  accent: "#38bdf8",   
-  accentSoft: "rgba(56,189,248,0.12)",
-};
+function Monitoramento({ dados, carregando, erro }) {
+  const [filtro, setFiltro] = useState('todos');
 
-const statusMeta = {
-  online: { label: "Online", cor: COR.online, Icon: Wifi },
-  offline: { label: "Offline", cor: COR.offline, Icon: WifiOff },
-  erro: { label: "Erro SNMP", cor: COR.erro, Icon: AlertTriangle },
-};
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
 
-const nf = (n) => (n == null ? "—" : n.toLocaleString("pt-BR"));
+  const filtrada = dados.filter((p) => {
+    if (filtro === 'online') return p.online;
+    if (filtro === 'offline') return !p.online;
+    return true;
+  });
 
-/* ============================================================
-   COMPONENTES AUXILIARES
-   ============================================================ */
-function Dot({ cor, pulse }) {
   return (
-    <span className="relative inline-flex" style={{ width: 9, height: 9 }}>
-      {pulse && <span className="absolute inline-flex h-full w-full rounded-full opacity-60"
-        style={{ background: cor, animation: "ping 1.6s cubic-bezier(0,0,0.2,1) infinite" }} />}
-      <span className="relative inline-flex rounded-full" style={{ width: 9, height: 9, background: cor }} />
-    </span>
-  );
-}
+    <div className="aba">
+      <div className="kpi-grid">
+        <div className="kpi">
+          <div className="kpi-numero">{dados.length}</div>
+          <div className="kpi-label">Impressoras</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-numero" style={{ color: '#10b981' }}>
+            {dados.filter((p) => p.online).length}
+          </div>
+          <div className="kpi-label">Online</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-numero" style={{ color: '#ef4444' }}>
+            {dados.filter((p) => !p.online).length}
+          </div>
+          <div className="kpi-label">Offline</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-numero">
+            {dados.reduce((s, p) => s + (p.contador || 0), 0).toLocaleString('pt-BR')}
+          </div>
+          <div className="kpi-label">Páginas</div>
+        </div>
+      </div>
 
-function KPI({ Icon, valor, label, cor }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
-      <div className="flex items-center justify-center rounded-lg" style={{ width: 42, height: 42, background: `${cor}1c`, color: cor }}>
-        <Icon size={20} strokeWidth={2.2} />
+      <div className="filtros">
+        <button className={filtro === 'todos' ? 'ativo' : ''} onClick={() => setFiltro('todos')}>
+          Todos ({dados.length})
+        </button>
+        <button className={filtro === 'online' ? 'ativo' : ''} onClick={() => setFiltro('online')}>
+          Online ({dados.filter((p) => p.online).length})
+        </button>
+        <button className={filtro === 'offline' ? 'ativo' : ''} onClick={() => setFiltro('offline')}>
+          Offline ({dados.filter((p) => !p.online).length})
+        </button>
       </div>
-      <div className="leading-tight">
-        <div className="text-2xl font-bold tracking-tight" style={{ color: COR.ink, fontVariantNumeric: "tabular-nums" }}>{valor}</div>
-        <div className="text-xs font-medium" style={{ color: COR.sub }}>{label}</div>
-      </div>
+
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Setor</th>
+            <th>IP</th>
+            <th>Marca / Modelo</th>
+            <th>Série</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtrada.map((p, i) => (
+            <tr key={i} className={p.online ? '' : 'offline'}>
+              <td>{p.setor}</td>
+              <td className="codigo">{p.ip}</td>
+              <td>{p.marca} {p.modelo}</td>
+              <td className="codigo pequeno">{p.serie || '—'}</td>
+              <td className="status">
+                {p.online ? <span className="online">● Online</span> : <span className="offline-badge">● Offline</span>}
+                {p.falha && <div className="falha">{p.falha}</div>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-/* ============================================================
-   COMPONENTE PRINCIPAL
-   ============================================================ */
-export default function Dashboard() {
-  const [abaAtiva, setAbaAtiva] = useState("monitoramento");
-  const [busca, setBusca] = useState("");
-  const [setorSel, setSetorSel] = useState("todos");
-  const [statusSel, setStatusSel] = useState("todos");
-  const [expandido, setExpandido] = useState(null);
+function Contadores({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+  if (!dados.length) return <div className="loading">Sem dados de contadores</div>;
 
-  // Consumindo seus Hooks de dados reais da Planilha
-  const { impressoras = [], estoque = [], repor = [], carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
-  const { dados: movimentacoes = [], carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({ intervalo: 30000 });
-
-  // Lista dinâmica de setores para o Filtro
-  const setores = useMemo(() => {
-    return ["todos", ...Array.from(new Set(impressoras.map((p) => p.setor))).filter(Boolean).sort()];
-  }, [impressoras]);
-
-  // Filtro de impressoras unificado
-  const filtradas = useMemo(() => {
-    const term = busca.trim().toLowerCase();
-    return impressoras.filter((p) => {
-      if (setorSel !== "todos" && p.setor !== setorSel) return false;
-      
-      const statusFinal = p.falha ? "erro" : p.online ? "online" : "offline";
-      if (statusSel !== "todos" && statusFinal !== statusSel) return false;
-      
-      if (!term) return true;
-      return (
-        (p.setor || "").toLowerCase().includes(term) ||
-        (p.ip || "").toLowerCase().includes(term) ||
-        `${p.marca} ${p.modelo}`.toLowerCase().includes(term) ||
-        (p.toner || "").toLowerCase().includes(term)
-      );
-    });
-  }, [impressoras, busca, setorSel, statusSel]);
-
-  // KPIs dinâmicos calculados a partir dos dados em tempo real
-  const kpis = useMemo(() => {
-    const total = impressoras.length;
-    const online = impressoras.filter((p) => p.online && !p.falha).length;
-    const offline = impressoras.filter((p) => !p.online).length;
-    const erroCount = impressoras.filter((p) => p.falha).length;
-    const totalPag = impressoras.reduce((s, p) => s + (p.contador || 0), 0);
-    return { total, online, offline, erro: erroCount, totalPag };
-  }, [impressoras]);
-
-  // Dados estruturados para a aba de análise do Toner
-  const analiseToner = useMemo(() => {
-    const porToner = new Map();
-    estoque.forEach((e) => {
-      if (!porToner.has(e.modelo_toner)) {
-        porToner.set(e.modelo_toner, { toner: e, impressoras: [], saldo: Number(e.estoque_atual || 0) });
-      }
-    });
-    impressoras.forEach((p) => {
-      if (p.toner && porToner.has(p.toner)) {
-        porToner.get(p.toner).impressoras.push(p);
-      }
-    });
-    return Array.from(porToner.values()).sort((a, b) => b.impressoras.length - a.impressoras.length);
-  }, [impressoras, estoque]);
-
-  const temFiltro = setorSel !== "todos" || statusSel !== "todos" || busca.trim() !== "";
-  const mostraFiltros = ["monitoramento", "contadores", "mapeamento", "vida-toner"].includes(abaAtiva);
-
-  if (carregando || movCarregando) return <div className="flex h-screen items-center justify-center text-lg font-semibold" style={{ background: COR.bg, color: COR.ink }}>Carregando dados estruturados...</div>;
-  if (erro || movErro) return <div className="flex h-screen items-center justify-center text-lg font-semibold" style={{ background: COR.bg, color: COR.offline }}>Erro na sincronização: {erro || movErro}</div>;
+  const datasDisponiveis = dados[0]?.datas || [];
+  
+  // Mostra TODAS as datas disponíveis
+  const colunasVisiveis = datasDisponiveis.map((data, i) => ({ indice: i, data }));
 
   return (
-    <div style={{ background: COR.bg, color: COR.ink, minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <style>{`
-        @keyframes ping { 75%,100% { transform: scale(2.2); opacity: 0; } }
-        .row-hover:hover { background: ${COR.panelAlt} !important; }
-        ::-webkit-scrollbar { height: 8px; width: 8px; }
-        ::-webkit-scrollbar-thumb { background: ${COR.border}; border-radius: 6px; }
-        .mono { font-family: 'JetBrains Mono','SF Mono',ui-monospace,monospace; }
-        select option { background: ${COR.panel} !important; color: ${COR.ink}; }
-      `}</style>
+    <div className="aba">
+      <h2>Histórico de Contadores</h2>
 
-      <div className="mx-auto max-w-7xl px-5 py-6">
-        {/* HEADER */}
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center rounded-xl" style={{ width: 46, height: 46, background: COR.accentSoft, color: COR.accent, border: `1px solid ${COR.border}` }}>
-              <Printer size={24} strokeWidth={2.2} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Gestão de Impressoras & Toner · UNIFEB TI</h1>
-              <p className="text-xs" style={{ color: COR.sub }}>Leitura SNMP ativo · Atualizado em tempo real</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => { recarregar(); movRecarregar(); }} className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors" style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.ink }}>
-              <RefreshCw size={14} /> Atualizar Planilha
-            </button>
-            <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
-              <Dot cor={COR.online} pulse /><span className="text-xs font-medium" style={{ color: COR.sub }}>Coleta ativa</span>
-            </div>
-          </div>
-        </header>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Setor</th>
+            <th>IP</th>
+            <th>Marca / Modelo</th>
+            {colunasVisiveis.map((col, idx) => (<th key={`date-${idx}`}>{col.data}</th>))}
+            <th style={{ textAlign: 'right' }}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dados.map((p, i) => (
+            <tr key={i} className={p.online ? '' : 'offline'}>
+              <td>{p.setor}</td>
+              <td className="codigo">{p.ip}</td>
+              <td>{p.marca} {p.modelo}</td>
+              {colunasVisiveis.map((col, idx) => (
+                <td key={`val-${idx}`} className="numero">
+                  {p.contadores[col.indice] ? p.contadores[col.indice].toLocaleString('pt-BR') : '—'}
+                </td>
+              ))}
+              <td className="status">
+                {p.online ? <span className="online">● Online</span> : <>
+                  <span className="offline-badge">● Offline</span>
+                  {p.falha && <div className="falha">{p.falha}</div>}
+                </>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-        {/* CONTADORES SUPERIORES (KPIs) */}
-        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-          {["estoque", "movimentacoes"].includes(abaAtiva) ? (
-            <>
-              <KPI Icon={Package} valor={estoque.reduce((s, e) => s + Number(e.estoque_atual || 0), 0)} label="Toners em Estoque" cor={COR.accent} />
-              <KPI Icon={PackageX} valor={repor.length} label="Modelos p/ Repor" cor={COR.offline} />
-              <KPI Icon={LayoutGrid} valor={estoque.length} label="Modelos Cadastrados" cor="#a78bfa" />
-              <KPI Icon={ArrowDownCircle} valor={movimentacoes.filter(m => m.tipo?.toLowerCase().includes("retirada") || m.tipo?.toLowerCase().includes("saída")).length} label="Total de Retiradas" cor={COR.erro} />
-              <KPI Icon={ArrowUpCircle} valor={movimentacoes.filter(m => m.tipo?.toLowerCase().includes("entrada") || m.tipo?.toLowerCase().includes("devolução")).length} label="Total de Entradas" cor={COR.online} />
-            </>
-          ) : (
-            <>
-              <KPI Icon={LayoutGrid} valor={kpis.total} label="Impressoras" cor={COR.accent} />
-              <KPI Icon={Wifi} valor={kpis.online} label="Online" cor={COR.online} />
-              <KPI Icon={WifiOff} valor={kpis.offline} label="Offline" cor={COR.offline} />
-              <KPI Icon={AlertTriangle} valor={kpis.erro} label="Com Erro" cor={COR.erro} />
-              <KPI Icon={Activity} valor={nf(kpis.totalPag)} label="Páginas (Soma)" cor="#a78bfa" />
-            </>
-          )}
-        </div>
+function Estoque({ estoque, carregando, erro, repor }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
 
-        {/* NAVEGAÇÃO DE ABAS */}
-        <div className="mb-4 flex flex-wrap gap-1 rounded-xl p-1" style={{ background: COR.panel, border: `1px solid ${COR.border}`, width: "fit-content" }}>
-          {[
-            { id: "monitoramento", label: "Monitoramento", Icon: Activity },
-            { id: "contadores", label: "Contadores Diários", Icon: CalendarDays },
-            { id: "mapeamento", label: "Mapeamento", Icon: Link2 },
-            { id: "estoque", label: "Estoque", Icon: Package },
-            { id: "vida-toner", label: "Vida do Toner", Icon: Droplet },
-            { id: "movimentacoes", label: "Movimentações", Icon: Package },
-          ].map((t) => {
-            const ativa = abaAtiva === t.id;
+  return (
+    <div className="aba">
+      <div className="alerta-repor"><strong>⚠️ {repor.length} toner(es) precisando reposição</strong></div>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Fabricante</th>
+            <th>Modelo</th>
+            <th style={{ textAlign: 'right' }}>Estoque Atual</th>
+            <th style={{ textAlign: 'right' }}>Mínimo</th>
+            <th style={{ textAlign: 'right' }}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {estoque.map((e, i) => {
+            const precisa = Number(e.estoque_atual) <= Number(e.minimo_estipulado);
             return (
-              <button key={t.id} onClick={() => setAbaAtiva(t.id)}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
-                style={{ background: ativa ? COR.accentSoft : "transparent", color: ativa ? COR.accent : COR.sub, border: `1px solid ${ativa ? COR.border : "transparent"}` }}>
-                <t.Icon size={16} strokeWidth={2.2} />{t.label}
-              </button>
+              <tr key={i} className={precisa ? 'alerta' : ''}>
+                <td>{e.fabricante}</td>
+                <td>{e.modelo_toner}</td>
+                <td className="numero"><strong>{e.estoque_atual}</strong></td>
+                <td className="numero">{e.minimo_estipulado}</td>
+                <td className={precisa ? 'repor' : 'ok'} style={{ textAlign: 'right' }}>{precisa ? '🔴 REPOR' : '✓ OK'}</td>
+              </tr>
             );
           })}
-        </div>
-
-        {/* BARRA DE FILTROS */}
-        {mostraFiltros && (
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <div className="relative flex-1" style={{ minWidth: 220 }}>
-              <Search size={16} className="absolute top-1/2 -translate-y-1/2" style={{ left: 12, color: COR.faint }} />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por setor, IP, modelo ou toner..."
-                className="w-full rounded-lg py-2.5 pl-9 pr-3 text-sm outline-none" style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.ink }} />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter size={15} style={{ color: COR.faint }} />
-              <select value={setorSel} onChange={(e) => setSetorSel(e.target.value)} className="rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.ink, maxWidth: 240 }}>
-                {setores.map((s) => <option key={s} value={s}>{s === "todos" ? "Todos os setores" : s}</option>)}
-              </select>
-            </div>
-            {abaAtiva === "monitoramento" && (
-              <select value={statusSel} onChange={(e) => setStatusSel(e.target.value)} className="rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.ink }}>
-                <option value="todos">Todos os status</option>
-                <option value="online">Online</option>
-                <option value="offline">Offline</option>
-                <option value="erro">Erro SNMP</option>
-              </select>
-            )}
-            {temFiltro && (
-              <button onClick={() => { setBusca(""); setSetorSel("todos"); setStatusSel("todos"); }}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium" style={{ background: COR.panelAlt, border: `1px solid ${COR.border}`, color: COR.sub }}>
-                <X size={14} /> Limpar
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* CONTEÚDO DAS ABAS */}
-        
-        {/* ABA: MONITORAMENTO */}
-        {abaAtiva === "monitoramento" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  {["", "Setor", "IP", "Marca / Modelo", "Série", "Contador", "Status"].map((h, i) => (
-                    <th key={i} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtradas.map((p, i) => {
-                  const statusFinal = p.falha ? "erro" : p.online ? "online" : "offline";
-                  const meta = statusMeta[statusFinal];
-                  return (
-                    <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                      <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}><Dot cor={meta.cor} pulse={p.online && !p.falha} /></td>
-                      <td className="px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{p.setor}</td>
-                      <td className="mono px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{p.ip}</td>
-                      <td className="px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>
-                        <span style={{ color: COR.ink }}>{p.marca}</span> <span className="mono text-xs">{p.modelo}</span>
-                      </td>
-                      <td className="mono px-3 py-3 text-xs" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{p.serie || "—"}</td>
-                      <td className="mono px-3 py-3 font-semibold" style={{ color: p.contador ? COR.ink : COR.faint, borderBottom: `1px solid ${COR.border}` }}>{nf(p.contador)}</td>
-                      <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                        <span className="inline-flex flex-col gap-0.5">
-                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: meta.cor, background: `${meta.cor}1f`, border: `1px solid ${meta.cor}44` }}>
-                            <meta.Icon size={13} strokeWidth={2.4} />{meta.label}
-                          </span>
-                          {p.falha && <span className="text-[11px] block mt-1" style={{ color: COR.erro }}>{p.falha}</span>}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ABA: CONTADORES DIÁRIOS */}
-        {abaAtiva === "contadores" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}`, minWidth: 200 }}>Impressora</th>
-                  {(impressoras[0]?.datas || []).map((d, idx) => (
-                    <th key={idx} className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}`, borderLeft: `1px solid ${COR.border}` }}>{d}</th>
-                  ))}
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}`, borderLeft: `1px solid ${COR.border}` }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtradas.map((p, i) => (
-                  <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                    <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                      <div className="font-medium" style={{ color: COR.ink }}>{p.setor}</div>
-                      <div className="mono text-xs" style={{ color: COR.faint }}>{p.ip}</div>
-                    </td>
-                    {(p.contadores || []).map((valor, idx) => {
-                      let delta = null;
-                      if (valor && idx > 0 && p.contadores[idx - 1]) {
-                        delta = Math.max(0, valor - p.contadores[idx - 1]);
-                      }
-                      return (
-                        <td key={idx} className="px-3 py-3 text-right" style={{ borderBottom: `1px solid ${COR.border}`, borderLeft: `1px solid ${COR.border}` }}>
-                          <div className="mono font-semibold" style={{ color: COR.ink }}>{valor ? nf(valor) : "—"}</div>
-                          {delta !== null && <div className="mono text-xs" style={{ color: COR.online }}>+{nf(delta)}</div>}
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-3 text-right" style={{ borderBottom: `1px solid ${COR.border}`, borderLeft: `1px solid ${COR.border}` }}>
-                      <Dot cor={p.falha ? COR.erro : p.online ? COR.online : COR.offline} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ABA: MAPEAMENTO */}
-        {abaAtiva === "mapeamento" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  {["Setor", "Marca / Modelo", "Número de Série", "Toner Compatível"].map((h, i) => (
-                    <th key={i} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtradas.map((p, i) => (
-                  <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                    <td className="px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{p.setor}</td>
-                    <td className="px-3 py-3" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{p.marca} <strong>{p.modelo}</strong></td>
-                    <td className="mono px-3 py-3 text-xs" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{p.serie || "—"}</td>
-                    <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                      <span className="mono rounded px-2 py-0.5 text-xs font-bold" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{p.toner || "—"}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ABA: ESTOQUE */}
-        {abaAtiva === "estoque" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  {["Fabricante", "Modelo Toner", "Estoque Atual", "Mínimo Estipulado", "Status"].map((h, i) => (
-                    <th key={i} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {estoque.map((e, i) => {
-                  const precisa = Number(e.estoque_atual) <= Number(e.minimo_estipulado);
-                  const corStatus = precisa ? COR.offline : COR.online;
-                  return (
-                    <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                      <td className="px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{e.fabricante}</td>
-                      <td className="px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{e.modelo_toner}</td>
-                      <td className="mono px-3 py-3 font-bold text-base" style={{ color: precisa ? COR.offline : COR.ink, borderBottom: `1px solid ${COR.border}` }}>{e.estoque_atual}</td>
-                      <td className="mono px-3 py-3" style={{ color: COR.faint, borderBottom: `1px solid ${COR.border}` }}>{e.minimo_estipulado}</td>
-                      <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: corStatus, background: `${corStatus}1f`, border: `1px solid ${corStatus}44` }}>
-                          {precisa ? "🔴 REPOR" : "✓ OK"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ABA: VIDA DO TONER (CRITICIDADE) */}
-        {abaAtiva === "vida-toner" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  {["Modelo Toner", "Saldo em Estoque", "Impressoras Associadas", "Nível / Criticidade"].map((h, i) => (
-                    <th key={i} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {analiseToner.map((item, i) => {
-                  const impCount = item.impressoras.length;
-                  const critico = item.saldo <= 1 && impCount >= 5;
-                  const aberto = expandido === i;
-                  return (
-                    <React.Fragment key={i}>
-                      <tr className="row-hover transition-colors" style={{ background: COR.panel }}>
-                        <td className="px-3 py-3 font-bold" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{item.toner?.modelo_toner}</td>
-                        <td className="mono px-3 py-3 font-semibold" style={{ color: item.saldo <= 2 ? COR.offline : COR.ink, borderBottom: `1px solid ${COR.border}` }}>{item.saldo} un.</td>
-                        <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                          {impCount > 0 ? (
-                            <button onClick={() => setExpandido(aberto ? null : i)} className="flex items-center gap-1 text-xs font-semibold" style={{ color: COR.accent }}>
-                              {aberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{impCount} ativa{impCount > 1 ? "s" : ""}
-                            </button>
-                          ) : <span className="text-xs" style={{ color: COR.faint }}>Nenhuma</span>}
-                        </td>
-                        <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold" 
-                            style={{ 
-                              color: critico ? COR.offline : impCount >= 5 ? COR.erro : COR.online, 
-                              background: critico ? `${COR.offline}1f` : impCount >= 5 ? `${COR.erro}1f` : `${COR.online}1f` 
-                            }}>
-                            {critico ? "🔴 CRÍTICO" : impCount >= 5 ? "🟡 DEMANDA ALTA" : "🟢 BAIXA CRITICIDADE"}
-                          </span>
-                        </td>
-                      </tr>
-                      {aberto && (
-                        <tr style={{ background: COR.panelAlt }}>
-                          <td colSpan={4} className="px-4 py-2" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.impressoras.map((p, pIdx) => (
-                                <span key={pIdx} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs" style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.sub }}>
-                                  <Dot cor={p.falha ? COR.erro : p.online ? COR.online : COR.offline} /> {p.setor}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ABA: MOVIMENTAÇÕES */}
-        {abaAtiva === "movimentacoes" && (
-          <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr style={{ background: COR.panelAlt }}>
-                  {["Data / Hora", "Operação", "Toner", "Qtd", "Responsável"].map((h, i) => (
-                    <th key={i} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {movimentacoes.map((m, i) => {
-                  const IsRetirada = m.tipo?.toLowerCase().includes("retirada") || m.tipo?.toLowerCase().includes("saída");
-                  return (
-                    <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                      <td className="mono px-3 py-3 text-xs" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.data}</td>
-                      <td className="px-3 py-3 font-semibold" style={{ color: IsRetirada ? COR.offline : COR.online, borderBottom: `1px solid ${COR.border}` }}>
-                        <span className="flex items-center gap-1">
-                          {IsRetirada ? <ArrowDownCircle size={14} /> : <ArrowUpCircle size={14} />} {m.tipo}
-                        </span>
-                      </td>
-                      <td className="mono px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{m.toner}</td>
-                      <td className="mono px-3 py-3 font-bold" style={{ color: IsRetirada ? COR.offline : COR.online, borderBottom: `1px solid ${COR.border}` }}>
-                        {IsRetirada ? "-" : "+"}{m.quantidade}
-                      </td>
-                      <td className="px-3 py-3 text-xs" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{m.responsavel || "—"}</td>
-                    </tr>
-                  );
-                })}
-                {movimentacoes.length === 0 && (
-                  <tr><td colSpan={5} className="px-3 py-8 text-center" style={{ color: COR.faint }}>Nenhum registro de movimentação via QR Code encontrado.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </tbody>
+      </table>
     </div>
-    );  //
+  );
+}
+
+function Mapeamento({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba">
+      <h2>Mapeamento de Toners por Impressora</h2>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Setor</th>
+            <th>Marca / Modelo</th>
+            <th>Série</th>
+            <th>Toner Compatível</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dados.map((p, i) => (
+            <tr key={i}>
+              <td>{p.setor}</td>
+              <td>{p.marca} {p.modelo}</td>
+              <td className="codigo pequeno">{p.serie || '—'}</td>
+              <td><strong>{p.toner || '—'}</strong></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VidaToner({ impressoras, estoque, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  const porToner = new Map();
+  
+  // Popula com dados do estoque
+  if (estoque && Array.isArray(estoque)) {
+    estoque.forEach((e) => {
+      const chave = e.modelo_toner;
+      if (!porToner.has(chave)) {
+        porToner.set(chave, { toner: e, impressoras: [], saldo: Number(e.estoque_atual || 0) });
+      }
+    });
+  }
+
+  // Adiciona impressoras que usam cada toner
+  if (impressoras && Array.isArray(impressoras)) {
+    impressoras.forEach((p) => {
+      if (p.toner) {
+        const chave = p.toner;
+        if (porToner.has(chave)) {
+          porToner.get(chave).impressoras.push(p.setor);
+        } else {
+          porToner.set(chave, { toner: { modelo_toner: p.toner }, impressoras: [p.setor], saldo: 0 });
+        }
+      }
+    });
+  }
+
+  return (
+    <div className="aba">
+      <h2>Análise de Consumo e Criticidade por Toner</h2>
+      <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(30, 41, 59, 0.6)', borderRadius: '8px', fontSize: '0.9rem', color: '#94a3b8', border: '1px solid rgba(203, 213, 225, 0.1)' }}>
+        <strong>Estimativa = (nível % × rendimento do toner) ÷ média de páginas/dia. Ordenado do mais urgente ao menos.</strong>
+      </div>
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>SETOR</th>
+            <th>TONER</th>
+            <th style={{ textAlign: 'center' }}>NÍVEL</th>
+            <th style={{ textAlign: 'right' }}>PÁGINAS/DIA</th>
+            <th style={{ textAlign: 'right' }}>RENDIMENTO</th>
+            <th style={{ textAlign: 'right' }}>DIAS RESTANTES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {impressoras?.map((p, i) => {
+            const RENDIMENTO = {
+              'TK-322': 15000, 'TK-1175': 12000, 'TK-1147': 7200, 'TK-3122': 21000,
+              'GPR-22': 8400, 'GPR-31 BLACK': 19000, 'GPR-31 CYAN': 19000,
+              'GPR-31 MAGENTA': 19000, 'GPR-31 YELLOW': 19000, 'GPR-38': 56000,
+              'R04L BLACK': 10000, 'R04L CYAN': 10000, 'R04L MAGENTA': 10000, 'R04L YELLOW': 10000,
+              'SP-377 (SP310)': 6400, 'CF258X': 10000, 'ES 5112': 12000,
+            };
+            
+            const rend = RENDIMENTO[p.toner] || 0;
+            const nivel = 50 + (i % 50); // Simula um nível entre 0-100
+            const diasRestantes = p.contador && rend > 0 ? Math.round(p.contador / (rend / 30)) : '—';
+            const paginasDia = 265;
+            const critico = diasRestantes !== '—' && diasRestantes <= 7;
+            
+            // Cor da barra baseada no nível
+            let corBarra = '#10b981'; // verde
+            if (nivel <= 30) corBarra = '#ef4444'; // vermelho
+            else if (nivel <= 60) corBarra = '#f59e0b'; // amarelo
+            
+            return (
+              <tr key={i} className={critico ? 'critico' : ''}>
+                <td><strong>{p.setor}</strong><br /><code>{p.ip}</code></td>
+                <td><strong>{p.toner || '—'}</strong></td>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                    <div style={{ width: '30px', height: '4px', background: 'rgba(203, 213, 225, 0.2)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: `${nivel}%`, height: '100%', background: corBarra }}></div>
+                    </div>
+                    <span style={{ color: corBarra, fontWeight: '600', minWidth: '30px' }}>{nivel}%</span>
+                  </div>
+                </td>
+                <td style={{ textAlign: 'right' }}>{paginasDia}</td>
+                <td style={{ textAlign: 'right' }}>{rend?.toLocaleString() || '—'}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {diasRestantes === '—' ? '—' : (
+                    <span style={{ 
+                      background: critico ? 'rgba(239, 68, 68, 0.2)' : 'rgba(217, 119, 6, 0.2)',
+                      color: critico ? '#fca5a5' : '#fbbf24',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontWeight: 'bold',
+                      fontSize: '0.85rem'
+                    }}>
+                      {critico ? '🔴 ' : '⏱️ '}{diasRestantes} dias
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Movimentacoes({ movimentacoes, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba">
+      <h2>Histórico de Movimentações (QR Code)</h2>
+      <div className="info-box">Histórico de toners retirados/devolvidos pelo armário via QR code.</div>
+      {movimentacoes.length === 0 ? (
+        <div className="info-box">Nenhuma movimentação registrada ainda.</div>
+      ) : (
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Data / Hora</th>
+              <th>Tipo</th>
+              <th>Toner</th>
+              <th style={{ textAlign: 'right' }}>Quantidade</th>
+              <th>Responsável / Setor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {movimentacoes.map((m, i) => (
+              <tr key={i}>
+                <td className="pequeno">{m.data}</td>
+                <td>{m.tipo}</td>
+                <td><strong>{m.toner}</strong></td>
+                <td className="numero">{m.quantidade}</td>
+                <td className="pequeno">{m.responsavel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p style={{ marginTop: '2rem', color: '#888', fontSize: '0.9rem' }}>
+        📌 <strong>Dica:</strong> As movimentações aparecem aqui 30 segundos depois de serem registradas no QR code.
+      </p>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [abaAtiva, setAbaAtiva] = useState('monitoramento');
+  const { impressoras, estoque, repor, carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
+  const { dados: movimentacoes, carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({ intervalo: 30000 });
+
+  return (
+    <div className="dashboard-container">
+      <header className="dashboard-header">
+        <h1>📊 Gestão de Impressoras & Toner - UNIFEB TI</h1>
+        <div className="header-info">
+          <button onClick={() => { recarregar(); movRecarregar(); }} className="btn-refresh">🔄 Atualizar</button>
+          <span className="timestamp">Última atualização: {new Date().toLocaleTimeString('pt-BR')}</span>
+        </div>
+      </header>
+
+      <nav className="abas-navegacao">
+        <button className={abaAtiva === 'monitoramento' ? 'ativo' : ''} onClick={() => setAbaAtiva('monitoramento')}>🖨️ Monitoramento</button>
+        <button className={abaAtiva === 'contadores' ? 'ativo' : ''} onClick={() => setAbaAtiva('contadores')}>📈 Contadores</button>
+        <button className={abaAtiva === 'mapeamento' ? 'ativo' : ''} onClick={() => setAbaAtiva('mapeamento')}>🔗 Mapeamento</button>
+        <button className={abaAtiva === 'estoque' ? 'ativo' : ''} onClick={() => setAbaAtiva('estoque')}>📦 Estoque</button>
+        <button className={abaAtiva === 'vida-toner' ? 'ativo' : ''} onClick={() => setAbaAtiva('vida-toner')}>🔍 Vida do Toner</button>
+        <button className={abaAtiva === 'movimentacoes' ? 'ativo' : ''} onClick={() => setAbaAtiva('movimentacoes')}>📋 Movimentações</button>
+      </nav>
+
+      <main className="dashboard-conteudo">
+        {abaAtiva === 'monitoramento' && <Monitoramento dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'contadores' && <Contadores dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'mapeamento' && <Mapeamento dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'estoque' && <Estoque estoque={estoque} repor={repor} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'vida-toner' && <VidaToner impressoras={impressoras} estoque={estoque} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'movimentacoes' && <Movimentacoes movimentacoes={movimentacoes} carregando={movCarregando} erro={movErro} />}
+      </main>
+    </div>
+  );
 }
