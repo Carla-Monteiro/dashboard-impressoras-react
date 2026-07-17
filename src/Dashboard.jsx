@@ -50,6 +50,13 @@ function Monitoramento({ dados, carregando, erro }) {
             <div className="status-item-label">Offline</div>
           </div>
         </div>
+        <div className="status-item">
+          <div className="status-item-icon">⚠️</div>
+          <div className="status-item-content">
+            <div className="status-item-numero">{dados.filter((p) => p.falha).length}</div>
+            <div className="status-item-label">Com Erro</div>
+          </div>
+        </div>
       </div>
 
       <div className="tabela-container">
@@ -301,41 +308,52 @@ function Movimentacoes({ movimentacoes, carregando, erro }) {
   if (erro) return <div className="erro">Erro: {erro}</div>;
 
   return (
-    <div className="aba-conteudo">
-      <div className="info-box">
-        📋 Histórico de toners retirados/devolvidos pelo armário via QR code.
+  <div className="aba-conteudo">
+    <div className="rounded-xl p-4" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold" style={{ color: COR.ink }}>
+        <Package size={16} style={{ color: COR.accent }} /> Últimas movimentações
       </div>
+
       {movimentacoes.length === 0 ? (
-        <div className="sem-dados-box">Nenhuma movimentação registrada ainda.</div>
+        <div className="py-10 text-center text-sm leading-relaxed" style={{ color: COR.sub }}>
+          Nenhuma movimentação lançada ainda.<br />Registre uma retirada acima.
+        </div>
       ) : (
-        <div className="tabela-container">
-          <table className="tabela-moderna">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
             <thead>
-              <tr>
-                <th>DATA / HORA</th>
-                <th>TIPO</th>
-                <th>TONER</th>
-                <th style={{ textAlign: 'right' }}>QUANTIDADE</th>
-                <th>RESPONSÁVEL</th>
+              <tr style={{ color: COR.sub }}>
+                {["Data / Hora", "Tipo", "Toner", "Quantidade", "Responsável"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-medium">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {movimentacoes.map((m, i) => (
-                <tr key={i}>
-                  <td className="data-cell">{m.data}</td>
-                  <td className="tipo-cell">{m.tipo}</td>
-                  <td className="toner-cell"><strong>{m.toner}</strong></td>
-                  <td className="numero-cell">{m.quantidade}</td>
-                  <td className="responsavel-cell">{m.responsavel}</td>
-                </tr>
-              ))}
+              {movimentacoes.map((m, i) => {
+                const cor = m.tipo === "Retirada" ? COR.offline : COR.online;
+                return (
+                  <tr key={i} style={{ borderTop: `1px solid ${COR.border}` }}>
+                    <td className="whitespace-nowrap px-3 py-2.5" style={{ color: COR.sub }}>{m.data}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold"
+                        style={{ background: `${cor}22`, color: cor, border: `1px solid ${cor}66` }}>
+                        {m.tipo === "Retirada" ? <ArrowDownCircle size={13} /> : <ArrowUpCircle size={13} />}
+                        {m.tipo}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold" style={{ color: COR.ink }}>{m.toner}</td>
+                    <td className="px-3 py-2.5 tabular-nums" style={{ color: COR.ink }}>{m.quantidade}</td>
+                    <td className="px-3 py-2.5" style={{ color: COR.sub }}>{m.responsavel || "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
     </div>
-  );
-}
+  </div>
+);
 
 export default function Dashboard() {
   const [abaAtiva, setAbaAtiva] = useState('monitoramento');
