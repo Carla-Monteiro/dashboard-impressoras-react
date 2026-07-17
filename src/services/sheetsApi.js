@@ -6,6 +6,12 @@ async function listar(aba) {
   const res = await fetch(`${BASE}?aba=${aba}`);
   const corpo = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(corpo.erro || `Erro ${res.status}`);
+  // a API pode devolver {erro: "..."} com status 200, ou algo inesperado.
+  // Garante array para quem consome não quebrar com .forEach/.map.
+  if (!Array.isArray(corpo)) {
+    console.error(`[sheetsApi] aba "${aba}" nao devolveu lista:`, corpo);
+    throw new Error(corpo?.erro || `Resposta inesperada da aba "${aba}"`);
+  }
   return corpo;
 }
 
@@ -19,6 +25,14 @@ function familia(toner) {
   return t;
 }
 
+/* Converte o NIVEL_TONER da planilha em número 0-100, ou null.
+   A célula pode vir vazia (marca não informa) ou como texto. */
+function parseNivel(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+}
+
 export function useAba(aba, { intervalo } = {}) {
   const [dados, setDados] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -30,6 +44,7 @@ export function useAba(aba, { intervalo } = {}) {
       setDados(await listar(aba));
     } catch (e) {
       setErro(e.message);
+      setDados([]);          // nunca deixa o estado virar não-array
     } finally {
       setCarregando(false);
     }
@@ -48,9 +63,15 @@ export function useAba(aba, { intervalo } = {}) {
 }
 
 export function useDashboard({ intervalo } = {}) {
-  const imp = useAba('impressoras', { intervalo });
-  const est = useAba('estoque', { intervalo });
-  const cnt = useAba('contadores', { intervalo });
+  const impRaw = useAba('impressoras', { intervalo });
+  const estRaw = useAba('estoque', { intervalo });
+  const cntRaw = useAba('contadores', { intervalo });
+
+  /* Blindagem: se qualquer aba devolver algo que não seja lista,
+     trata como vazia em vez de quebrar a tela inteira. */
+  const imp = { ...impRaw, dados: Array.isArray(impRaw.dados) ? impRaw.dados : [] };
+  const est = { ...estRaw, dados: Array.isArray(estRaw.dados) ? estRaw.dados : [] };
+  const cnt = { ...cntRaw, dados: Array.isArray(cntRaw.dados) ? cntRaw.dados : [] };
 
   const porFamilia = useMemo(() => {
     const m = new Map();
@@ -72,6 +93,31 @@ export function useDashboard({ intervalo } = {}) {
     () =>
       imp.dados.map((p) => {
         const c = porIp.get(String(p.ip).trim());
+
+        /* ------------------------------------------------------------
+           STATUS: vem da coluna F que o leitor.py grava, não mais de
+           "contador é null logo está offline". A inferência antiga
+           marcava offline qualquer impressora sem leitura do dia.
+           Fallback para o contador só se a coluna estiver vazia.
+           ------------------------------------------------------------ */
+        const statusPlanilha = String(p.status || '').trim().toLowerCase();
+        const online = statusPlanilha
+          ? statusPlanilha === 'online'
+          : (c ? c.online : false);
+
+        /* ------------------------------------------------------------
+           FALHA: prioriza o erro real detectado via SNMP
+           ("Papel atolado", "Sem papel"). Só cai no texto genérico
+           quando não há erro específico.
+           ------------------------------------------------------------ */
+        const erroDetectado = String(p.erro_detectado || '').trim();
+        let falha = null;
+        if (erroDetectado) {
+          falha = erroDetectado;
+        } else if (!online) {
+          falha = c && c.falha ? c.falha : 'Sem resposta SNMP';
+        }
+
         return {
           setor: p.setor,
           ip: p.ip,
@@ -83,8 +129,12 @@ export function useDashboard({ intervalo } = {}) {
           toners: porFamilia.get(familia(p.modelo_toner_compativel)) || [],
           contador: c ? c.contador : null,
           data_leitura: c ? c.data_leitura : null,
-          online: c ? c.online : false,
-          falha: c ? c.falha : 'sem leitura',
+
+          online,
+          falha,
+          erro: erroDetectado || null,       // só o problema específico
+          nivel: parseNivel(p.nivel_toner),  // 0-100 ou null
+
           historico: c ? c.historico : [],
           datas: c ? c.datas : [],
           contadores: c ? c.contadores : [],
@@ -99,6 +149,12 @@ export function useDashboard({ intervalo } = {}) {
   );
 
   const offline = useMemo(() => impressoras.filter((p) => !p.online), [impressoras]);
+
+  /* impressoras online mas com problema reportado (sem papel, atolada...) */
+  const comProblema = useMemo(
+    () => impressoras.filter((p) => p.erro),
+    [impressoras]
+  );
 
   const semToner = useMemo(
     () => impressoras.filter((p) => p.toner && p.toners.length === 0),
@@ -115,6 +171,7 @@ export function useDashboard({ intervalo } = {}) {
     estoque: est.dados,
     repor,
     offline,
+    comProblema,
     semToner,
     tonerOrfao,
     carregando: imp.carregando || est.carregando || cnt.carregando,
@@ -132,7 +189,7 @@ export function useMovimentacoes({ intervalo } = {}) {
     try {
       setErro(null);
       const mov = await listar('movimentacoes');
-      const formatado = mov.map((m) => ({
+      const formatado = (Array.isArray(mov) ? mov : []).map((m) => ({
         data: m.carimbo_de_data_hora || m['carimbo de data/hora'] || '—',
         tipo: m.tipo_de_movimentacao || m['tipo de movimentacao'] || '—',
         toner: m.modelo_do_toner || m['modelo do toner'] || '—',
@@ -142,6 +199,7 @@ export function useMovimentacoes({ intervalo } = {}) {
       setDados(formatado);
     } catch (e) {
       setErro(e.message);
+      setDados([]);
     } finally {
       setCarregando(false);
     }
