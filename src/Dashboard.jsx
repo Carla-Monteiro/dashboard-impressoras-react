@@ -1,8 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
-  LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
-  ArrowDownCircle, ArrowUpCircle, PlusCircle, PackageX,
-  Droplet, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
 import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import './App.css';
 
@@ -54,13 +50,6 @@ function Monitoramento({ dados, carregando, erro }) {
             <div className="status-item-label">Offline</div>
           </div>
         </div>
-        <div className="status-item">
-          <div className="status-item-icon">⚠️</div>
-          <div className="status-item-content">
-            <div className="status-item-numero">{dados.filter((p) => p.falha).length}</div>
-            <div className="status-item-label">Com Erro</div>
-          </div>
-        </div>
       </div>
 
       <div className="tabela-container">
@@ -96,80 +85,257 @@ function Monitoramento({ dados, carregando, erro }) {
   );
 }
 
-const impressorasPorToner = (modelo) => printers.filter((p) => p.toner === modelo);
+function Contadores({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+  if (!dados.length) return <div className="loading">Sem dados de contadores</div>;
 
-/* ============================================================ */
+  const datasDisponiveis = dados[0]?.datas || [];
+  const colunasVisiveis = datasDisponiveis.map((data, i) => ({ indice: i, data }));
 
-const COR = {
-  bg: "#0e1420", panel: "#161d2b", panelAlt: "#1b2434", border: "#26324a",
-  ink: "#e8edf6", sub: "#8b98b0", faint: "#5b6880",
-  online: "#34d399", offline: "#f43f5e", erro: "#f59e0b",
-  accent: "#38bdf8", accentSoft: "rgba(56,189,248,0.12)",
-};
-
-const statusMeta = {
-  online: { label: "Online", cor: COR.online, Icon: Wifi },
-  offline: { label: "Offline", cor: COR.offline, Icon: WifiOff },
-  erro: { label: "Erro SNMP", cor: COR.erro, Icon: AlertTriangle },
-};
-
-const nf = (n) => (n == null ? "—" : n.toLocaleString("pt-BR"));
-
-function corDias(d) {
-  if (d == null) return COR.faint;
-  if (d <= 7) return COR.offline;
-  if (d <= 20) return COR.erro;
-  return COR.online;
-}
-
-function StatusBadge({ status }) {
-  const m = statusMeta[status];
-  const Icon = m.Icon;
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-      style={{ color: m.cor, background: `${m.cor}1f`, border: `1px solid ${m.cor}44` }}>
-      <Icon size={13} strokeWidth={2.4} />{m.label}
-    </span>
-  );
-}
-
-function Dot({ cor, pulse }) {
-  return (
-    <span className="relative inline-flex" style={{ width: 9, height: 9 }}>
-      {pulse && <span className="absolute inline-flex h-full w-full rounded-full opacity-60"
-        style={{ background: cor, animation: "ping 1.6s cubic-bezier(0,0,0.2,1) infinite" }} />}
-      <span className="relative inline-flex rounded-full" style={{ width: 9, height: 9, background: cor }} />
-    </span>
-  );
-}
-
-function KPI({ Icon, valor, label, cor }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
-      <div className="flex items-center justify-center rounded-lg" style={{ width: 42, height: 42, background: `${cor}1c`, color: cor }}>
-        <Icon size={20} strokeWidth={2.2} />
+    <div className="aba-conteudo">
+      <div className="info-box">
+        📊 Cada coluna é uma data. O número menor abaixo é o volume impresso naquele dia (Δ diário).
       </div>
-      <div className="leading-tight">
-        <div className="text-2xl font-bold tracking-tight" style={{ color: COR.ink, fontVariantNumeric: "tabular-nums" }}>{valor}</div>
-        <div className="text-xs font-medium" style={{ color: COR.sub }}>{label}</div>
+
+      <div className="tabela-container">
+        <table className="tabela-moderna">
+          <thead>
+            <tr>
+              <th>IMPRESSORA</th>
+              {colunasVisiveis.map((col, idx) => (<th key={`date-${idx}`} className="data-coluna">{col.data}</th>))}
+              <th style={{ textAlign: 'right' }}>STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.map((p, i) => (
+              <tr key={i} className={p.online ? '' : 'linha-offline'}>
+                <td className="impressora-cell"><strong>{p.setor}</strong><br /><code>{p.ip}</code></td>
+                {colunasVisiveis.map((col, idx) => {
+                  const valor = p.contadores[col.indice];
+                  let delta = '—';
+                  if (valor && col.indice > 0 && p.contadores[col.indice - 1]) {
+                    delta = Math.max(0, valor - p.contadores[col.indice - 1]);
+                  }
+                  return (
+                    <td key={`val-${idx}`} className="contador-coluna">
+                      <div className="valor-principal">{valor ? valor.toLocaleString('pt-BR') : '—'}</div>
+                      {delta !== '—' && <div className="delta-diario">+{delta}</div>}
+                    </td>
+                  );
+                })}
+                <td className="status-cell">
+                  {p.online ? <span className="badge-online">● Online</span> : <>
+                    <span className="badge-offline">● Offline</span>
+                    {p.falha && <div className="falha-msg">{p.falha}</div>}
+                  </>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function BarraNivel({ nivel }) {
-  if (nivel == null) return <span style={{ color: COR.faint }}>—</span>;
-  const cor = nivel <= 15 ? COR.offline : nivel <= 35 ? COR.erro : COR.online;
+function Mapeamento({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 rounded-full" style={{ width: 70, background: COR.panelAlt, border: `1px solid ${COR.border}` }}>
-        <div className="h-full rounded-full" style={{ width: `${nivel}%`, background: cor }} />
+    <div className="aba-conteudo">
+      <div className="info-box">
+        🔗 Mapeamento de Toners Compatíveis por Impressora
       </div>
-      <span className="mono text-xs font-semibold" style={{ color: cor, minWidth: 30 }}>{nivel}%</span>
+      <div className="tabela-container">
+        <table className="tabela-moderna">
+          <thead>
+            <tr>
+              <th>SETOR</th>
+              <th>MARCA / MODELO</th>
+              <th>SÉRIE</th>
+              <th>TONER COMPATÍVEL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.map((p, i) => (
+              <tr key={i}>
+                <td>{p.setor}</td>
+                <td><strong>{p.marca} {p.modelo}</strong></td>
+                <td className="codigo pequeno">{p.serie || '—'}</td>
+                <td><strong>{p.toner || '—'}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
+function Estoque({ estoque, carregando, erro, repor }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba-conteudo">
+      {repor.length > 0 && (
+        <div className="alerta-box">
+          <strong>⚠️ {repor.length} toner(es) precisando reposição</strong>
+        </div>
+      )}
+      <div className="tabela-container">
+        <table className="tabela-moderna">
+          <thead>
+            <tr>
+              <th>FABRICANTE</th>
+              <th>MODELO</th>
+              <th style={{ textAlign: 'right' }}>ESTOQUE</th>
+              <th style={{ textAlign: 'right' }}>MÍNIMO</th>
+              <th style={{ textAlign: 'right' }}>STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {estoque.map((e, i) => {
+              const precisa = Number(e.estoque_atual) <= Number(e.minimo_estipulado);
+              return (
+                <tr key={i} className={precisa ? 'linha-alerta' : ''}>
+                  <td className="fab-cell">{e.fabricante}</td>
+                  <td className="modelo-cell">{e.modelo_toner}</td>
+                  <td className="numero-cell"><strong style={{ color: precisa ? '#ef4444' : '#000' }}>{e.estoque_atual}</strong></td>
+                  <td className="numero-cell">{e.minimo_estipulado}</td>
+                  <td className={`status-cell ${precisa ? 'repor' : 'ok'}`}>
+                    {precisa ? '🔴 REPOR' : '✓ OK'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function VidaToner({ impressoras, estoque, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  // Cria mapa de toners com impressoras que usam
+  const porToner = new Map();
+  
+  // Popula com dados do estoque
+  if (estoque && Array.isArray(estoque)) {
+    estoque.forEach((e) => {
+      const chave = e.modelo_toner;
+      if (!porToner.has(chave)) {
+        porToner.set(chave, { 
+          toner: e, 
+          impressoras: [],
+          saldo: Number(e.estoque_atual || 0)
+        });
+      }
+    });
+  }
+
+  // Adiciona impressoras que usam cada toner
+  if (impressoras && Array.isArray(impressoras)) {
+    impressoras.forEach((p) => {
+      if (p.toner) {
+        const chave = p.toner;
+        if (porToner.has(chave)) {
+          porToner.get(chave).impressoras.push(p.setor);
+        }
+      }
+    });
+  }
+
+  const analise = Array.from(porToner.values()).sort((a, b) => b.impressoras.length - a.impressoras.length);
+
+  return (
+    <div className="aba-conteudo">
+      <div className="info-box">
+        🔍 Análise de Consumo e Criticidade por Toner
+      </div>
+      <div className="tabela-container">
+        <table className="tabela-moderna">
+          <thead>
+            <tr>
+              <th>TONER</th>
+              <th style={{ textAlign: 'right' }}>SALDO</th>
+              <th style={{ textAlign: 'right' }}>IMPRESSORAS USANDO</th>
+              <th>CRITICIDADE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analise.length > 0 ? analise.map((item, i) => {
+              const saldo = item.saldo || Number(item.toner?.estoque_atual || 0);
+              const impCount = item.impressoras.length;
+              const critico = saldo <= 1 && impCount >= 5;
+              return (
+                <tr key={i} className={critico ? 'critico' : ''}>
+                  <td><strong>{item.toner?.modelo_toner || '—'}</strong></td>
+                  <td className={`numero-cell ${saldo <= 2 ? 'baixo' : ''}`}>{saldo}</td>
+                  <td className="numero-cell">{impCount}</td>
+                  <td>{critico ? '🔴 CRÍTICO' : impCount >= 5 ? '🟡 ALTO' : '🟢 BAIXO'}</td>
+                </tr>
+              );
+            }) : (
+              <tr>
+                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                  Carregando dados de toner...
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Movimentacoes({ movimentacoes, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba-conteudo">
+      <div className="info-box">
+        📋 Histórico de toners retirados/devolvidos pelo armário via QR code.
+      </div>
+      {movimentacoes.length === 0 ? (
+        <div className="sem-dados-box">Nenhuma movimentação registrada ainda.</div>
+      ) : (
+        <div className="tabela-container">
+          <table className="tabela-moderna">
+            <thead>
+              <tr>
+                <th>DATA / HORA</th>
+                <th>TIPO</th>
+                <th>TONER</th>
+                <th style={{ textAlign: 'right' }}>QUANTIDADE</th>
+                <th>RESPONSÁVEL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movimentacoes.map((m, i) => (
+                <tr key={i}>
+                  <td className="data-cell">{m.data}</td>
+                  <td className="tipo-cell">{m.tipo}</td>
+                  <td className="toner-cell"><strong>{m.toner}</strong></td>
+                  <td className="numero-cell">{m.quantidade}</td>
+                  <td className="responsavel-cell">{m.responsavel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [abaAtiva, setAbaAtiva] = useState('monitoramento');
