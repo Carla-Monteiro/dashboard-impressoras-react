@@ -1,102 +1,56 @@
 import React, { useState } from 'react';
 import { useDashboard, useMovimentacoes } from './services/sheetsApi';
-import {
-  Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
-  CalendarDays, ArrowDownCircle, ArrowUpCircle, Clock, X
-} from 'lucide-react';
 import './App.css';
 
-// ===== COMPONENTE: KPI Cards =====
-function KPICard({ icon: Icon, numero, label, cor = '#3b82f6' }) {
-  return (
-    <div className="kpi-card" style={{ borderLeftColor: cor }}>
-      <div className="kpi-icon" style={{ color: cor }}>
-        <Icon size={24} />
-      </div>
-      <div className="kpi-content">
-        <div className="kpi-numero" style={{ color: cor }}>{numero}</div>
-        <div className="kpi-label">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-// ===== COMPONENTE: Monitoramento =====
 function Monitoramento({ dados, carregando, erro }) {
   const [filtro, setFiltro] = useState('todos');
-  const [busca, setBusca] = useState('');
 
-  if (carregando) return <div className="loading">⏳ Carregando...</div>;
-  if (erro) return <div className="erro">❌ Erro: {erro}</div>;
-  if (!dados || !Array.isArray(dados) || dados.length === 0) {
-    return <div className="loading">Aguardando dados...</div>;
-  }
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
 
-  let filtrada = dados;
-  if (filtro === 'online') filtrada = dados.filter((p) => p.online);
-  if (filtro === 'offline') filtrada = dados.filter((p) => !p.online);
-
-  if (busca) {
-    const termo = busca.toLowerCase();
-    filtrada = filtrada.filter(
-      (p) =>
-        (p.setor && p.setor.toLowerCase().includes(termo)) ||
-        (p.ip && p.ip.toLowerCase().includes(termo)) ||
-        (p.marca && p.marca.toLowerCase().includes(termo)) ||
-        (p.modelo && p.modelo.toLowerCase().includes(termo))
-    );
-  }
-
-  const online = dados.filter((p) => p.online).length;
-  const offlineCount = dados.filter((p) => !p.online).length;
+  const filtrada = dados.filter((p) => {
+    if (filtro === 'online') return p.online;
+    if (filtro === 'offline') return !p.online;
+    return true;
+  });
 
   return (
     <div className="aba-conteudo">
       <div className="kpi-grid">
-        <KPICard icon={Printer} numero={dados.length} label="Impressoras" cor="#3b82f6" />
-        <KPICard icon={Wifi} numero={online} label="Online" cor="#10b981" />
-        <KPICard icon={WifiOff} numero={offlineCount} label="Offline" cor="#ef4444" />
-        <KPICard
-          icon={Activity}
-          numero={dados.reduce((s, p) => s + (p.contador || 0), 0).toLocaleString('pt-BR')}
-          label="Páginas (soma)"
-          cor="#8b5cf6"
-        />
+        <div className="kpi-card">
+          <div className="kpi-numero">{dados.length}</div>
+          <div className="kpi-label">Impressoras</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-numero" style={{ color: '#10b981' }}>
+            {dados.filter((p) => p.online).length}
+          </div>
+          <div className="kpi-label">Online</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-numero" style={{ color: '#ef4444' }}>
+            {dados.filter((p) => !p.online).length}
+          </div>
+          <div className="kpi-label">Offline</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-numero">
+            {dados.reduce((s, p) => s + (p.contador || 0), 0).toLocaleString('pt-BR')}
+          </div>
+          <div className="kpi-label">Páginas</div>
+        </div>
       </div>
 
       <div className="filtros-secao">
-        <div className="busca-container">
-          <Search size={20} className="busca-icon" />
-          <input
-            type="text"
-            placeholder="Buscar por setor, IP, marca ou modelo..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="busca-input"
-          />
-          {busca && <X size={18} className="busca-limpar" onClick={() => setBusca('')} />}
-        </div>
-
-        <div className="filtros-botoes">
-          <button
-            className={`filtro-btn ${filtro === 'todos' ? 'ativo' : ''}`}
-            onClick={() => setFiltro('todos')}
-          >
-            Todos ({dados.length})
-          </button>
-          <button
-            className={`filtro-btn ${filtro === 'online' ? 'ativo' : ''}`}
-            onClick={() => setFiltro('online')}
-          >
-            <Wifi size={16} /> Online ({online})
-          </button>
-          <button
-            className={`filtro-btn ${filtro === 'offline' ? 'ativo' : ''}`}
-            onClick={() => setFiltro('offline')}
-          >
-            <WifiOff size={16} /> Offline ({offlineCount})
-          </button>
-        </div>
+        <button className={`filtro-btn ${filtro === 'todos' ? 'ativo' : ''}`} onClick={() => setFiltro('todos')}>
+          Todos ({dados.length})
+        </button>
+        <button className={`filtro-btn ${filtro === 'online' ? 'ativo' : ''}`} onClick={() => setFiltro('online')}>
+          Online ({dados.filter((p) => p.online).length})
+        </button>
+        <button className={`filtro-btn ${filtro === 'offline' ? 'ativo' : ''}`} onClick={() => setFiltro('offline')}>
+          Offline ({dados.filter((p) => !p.online).length})
+        </button>
       </div>
 
       <div className="tabela-container">
@@ -112,39 +66,19 @@ function Monitoramento({ dados, carregando, erro }) {
             </tr>
           </thead>
           <tbody>
-            {filtrada.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="sem-dados">
-                  Nenhuma impressora encontrada
+            {filtrada.map((p, i) => (
+              <tr key={i} className={p.online ? '' : 'linha-offline'}>
+                <td className="setor-cell">{p.setor}</td>
+                <td className="ip-cell"><code>{p.ip}</code></td>
+                <td className="marca-cell">{p.marca} <strong>{p.modelo}</strong></td>
+                <td className="serie-cell"><code>{p.serie || '—'}</code></td>
+                <td className="contador-cell">{p.contador?.toLocaleString('pt-BR') || '—'}</td>
+                <td className="status-cell">
+                  {p.online ? <span className="badge-online">● Online</span> : <span className="badge-offline">● Offline</span>}
+                  {p.falha && <div className="falha-msg">{p.falha}</div>}
                 </td>
               </tr>
-            ) : (
-              filtrada.map((p, i) => (
-                <tr key={i} className={!p.online ? 'linha-offline' : ''}>
-                  <td className="setor-cell">{p.setor || '—'}</td>
-                  <td className="ip-cell">
-                    <code>{p.ip || '—'}</code>
-                  </td>
-                  <td className="marca-cell">
-                    {p.marca || '—'} <strong>{p.modelo || '—'}</strong>
-                  </td>
-                  <td className="serie-cell">
-                    <code>{p.serie || '—'}</code>
-                  </td>
-                  <td className="contador-cell">
-                    {p.contador !== null && p.contador !== undefined ? p.contador.toLocaleString('pt-BR') : '—'}
-                  </td>
-                  <td className="status-cell">
-                    {p.online ? (
-                      <span className="badge-online">● Online</span>
-                    ) : (
-                      <span className="badge-offline">● Offline</span>
-                    )}
-                    {p.falha && <div className="falha-msg">{p.falha}</div>}
-                  </td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>
@@ -152,22 +86,18 @@ function Monitoramento({ dados, carregando, erro }) {
   );
 }
 
-// ===== COMPONENTE: Contadores Diários =====
 function Contadores({ dados, carregando, erro }) {
-  if (carregando) return <div className="loading">⏳ Carregando...</div>;
-  if (erro) return <div className="erro">❌ Erro: {erro}</div>;
-  if (!dados || !Array.isArray(dados) || dados.length === 0) {
-    return <div className="loading">Sem dados de contadores</div>;
-  }
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+  if (!dados.length) return <div className="loading">Sem dados de contadores</div>;
 
   const datasDisponiveis = dados[0]?.datas || [];
-  const ultimas5Datas = datasDisponiveis.slice(-5);
+  const colunasVisiveis = datasDisponiveis.map((data, i) => ({ indice: i, data }));
 
   return (
     <div className="aba-conteudo">
       <div className="info-box">
-        <CalendarDays size={18} />
-        Cada coluna é uma data. O número menor abaixo é o volume impresso naquele dia (Δ diário).
+        📊 Cada coluna é uma data. O número menor abaixo é o volume impresso naquele dia (Δ diário).
       </div>
 
       <div className="tabela-container">
@@ -175,58 +105,35 @@ function Contadores({ dados, carregando, erro }) {
           <thead>
             <tr>
               <th>IMPRESSORA</th>
-              {ultimas5Datas.map((data, idx) => (
-                <th key={`date-${idx}`} className="data-coluna">
-                  {data}
-                </th>
-              ))}
-              <th>STATUS</th>
+              {colunasVisiveis.map((col, idx) => (<th key={`date-${idx}`} className="data-coluna">{col.data}</th>))}
+              <th style={{ textAlign: 'right' }}>STATUS</th>
             </tr>
           </thead>
           <tbody>
-            {dados.map((p, i) => {
-              const ultimosContadores = (p.contadores || []).slice(-5);
-              return (
-                <tr key={i} className={!p.online ? 'linha-offline' : ''}>
-                  <td className="impressora-cell">
-                    <div className="imp-info">
-                      <strong>{p.setor || '—'}</strong>
-                      <code>{p.ip || '—'}</code>
-                    </div>
-                  </td>
-                  {ultimosContadores.map((c, idx) => {
-                    let delta = '—';
-                    if (
-                      c !== null &&
-                      idx > 0 &&
-                      ultimosContadores[idx - 1] !== null
-                    ) {
-                      delta = Math.max(0, c - ultimosContadores[idx - 1]);
-                    }
-                    return (
-                      <td key={`val-${idx}`} className="contador-coluna">
-                        <div className="valor-principal">
-                          {c !== null && c !== undefined ? c.toLocaleString('pt-BR') : '—'}
-                        </div>
-                        {delta !== '—' && (
-                          <div className="delta-diario">+{delta}</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="status-cell">
-                    {p.online ? (
-                      <span className="badge-online">● Online</span>
-                    ) : (
-                      <>
-                        <span className="badge-offline">● Offline</span>
-                        {p.falha && <div className="falha-msg">{p.falha}</div>}
-                      </>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {dados.map((p, i) => (
+              <tr key={i} className={p.online ? '' : 'linha-offline'}>
+                <td className="impressora-cell"><strong>{p.setor}</strong><br /><code>{p.ip}</code></td>
+                {colunasVisiveis.map((col, idx) => {
+                  const valor = p.contadores[col.indice];
+                  let delta = '—';
+                  if (valor && col.indice > 0 && p.contadores[col.indice - 1]) {
+                    delta = Math.max(0, valor - p.contadores[col.indice - 1]);
+                  }
+                  return (
+                    <td key={`val-${idx}`} className="contador-coluna">
+                      <div className="valor-principal">{valor ? valor.toLocaleString('pt-BR') : '—'}</div>
+                      {delta !== '—' && <div className="delta-diario">+{delta}</div>}
+                    </td>
+                  );
+                })}
+                <td className="status-cell">
+                  {p.online ? <span className="badge-online">● Online</span> : <>
+                    <span className="badge-offline">● Offline</span>
+                    {p.falha && <div className="falha-msg">{p.falha}</div>}
+                  </>}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -234,23 +141,52 @@ function Contadores({ dados, carregando, erro }) {
   );
 }
 
-// ===== COMPONENTE: Estoque de Toners =====
-function Estoque({ estoque, repor, carregando, erro }) {
-  if (carregando) return <div className="loading">⏳ Carregando...</div>;
-  if (erro) return <div className="erro">❌ Erro: {erro}</div>;
-  if (!estoque || !Array.isArray(estoque) || estoque.length === 0) {
-    return <div className="loading">Sem dados de estoque</div>;
-  }
+function Mapeamento({ dados, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
 
   return (
     <div className="aba-conteudo">
-      {repor && Array.isArray(repor) && repor.length > 0 && (
+      <div className="info-box">
+        🔗 Mapeamento de Toners Compatíveis por Impressora
+      </div>
+      <div className="tabela-container">
+        <table className="tabela-moderna">
+          <thead>
+            <tr>
+              <th>SETOR</th>
+              <th>MARCA / MODELO</th>
+              <th>SÉRIE</th>
+              <th>TONER COMPATÍVEL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.map((p, i) => (
+              <tr key={i}>
+                <td>{p.setor}</td>
+                <td><strong>{p.marca} {p.modelo}</strong></td>
+                <td className="codigo pequeno">{p.serie || '—'}</td>
+                <td><strong>{p.toner || '—'}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Estoque({ estoque, carregando, erro, repor }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba-conteudo">
+      {repor.length > 0 && (
         <div className="alerta-box">
-          <AlertTriangle size={20} />
-          <strong>{repor.length} toner(es) precisam reposição!</strong>
+          <strong>⚠️ {repor.length} toner(es) precisando reposição</strong>
         </div>
       )}
-
       <div className="tabela-container">
         <table className="tabela-moderna">
           <thead>
@@ -264,26 +200,15 @@ function Estoque({ estoque, repor, carregando, erro }) {
           </thead>
           <tbody>
             {estoque.map((e, i) => {
-              const atual = Number(e.estoque_atual || 0);
-              const minimo = Number(e.minimo_estipulado || 0);
-              const precisa = atual <= minimo;
-
+              const precisa = Number(e.estoque_atual) <= Number(e.minimo_estipulado);
               return (
                 <tr key={i} className={precisa ? 'linha-alerta' : ''}>
-                  <td className="fab-cell">{e.fabricante || '—'}</td>
-                  <td className="modelo-cell">{e.modelo_toner || '—'}</td>
-                  <td className="numero-cell">
-                    <strong style={{ color: precisa ? '#ef4444' : '#000' }}>
-                      {atual}
-                    </strong>
-                  </td>
-                  <td className="numero-cell">{minimo}</td>
+                  <td className="fab-cell">{e.fabricante}</td>
+                  <td className="modelo-cell">{e.modelo_toner}</td>
+                  <td className="numero-cell"><strong style={{ color: precisa ? '#ef4444' : '#000' }}>{e.estoque_atual}</strong></td>
+                  <td className="numero-cell">{e.minimo_estipulado}</td>
                   <td className={`status-cell ${precisa ? 'repor' : 'ok'}`}>
-                    {precisa ? (
-                      <span className="badge-repor">🔴 REPOR</span>
-                    ) : (
-                      <span className="badge-ok">✓ OK</span>
-                    )}
+                    {precisa ? '🔴 REPOR' : '✓ OK'}
                   </td>
                 </tr>
               );
@@ -295,52 +220,52 @@ function Estoque({ estoque, repor, carregando, erro }) {
   );
 }
 
-// ===== COMPONENTE: Movimentações =====
-function Movimentacoes({ movimentacoes, carregando, erro }) {
-  if (carregando) return <div className="loading">⏳ Carregando...</div>;
-  if (erro) return <div className="erro">❌ Erro: {erro}</div>;
-  if (!movimentacoes || !Array.isArray(movimentacoes) || movimentacoes.length === 0) {
-    return <div className="sem-dados-box">Nenhuma movimentação registrada ainda.</div>;
-  }
+function VidaToner({ impressoras, estoque, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  const porToner = new Map();
+  impressoras.forEach((p) => {
+    if (p.toners?.length > 0) {
+      p.toners.forEach((t) => {
+        const chave = t.modelo_toner;
+        if (!porToner.has(chave)) porToner.set(chave, { toner: t, impressoras: [] });
+        porToner.get(chave).impressoras.push(p.setor);
+      });
+    }
+  });
+
+  const analise = Array.from(porToner.values()).sort((a, b) => b.impressoras.length - a.impressoras.length);
 
   return (
     <div className="aba-conteudo">
       <div className="info-box">
-        <Clock size={18} />
-        Histórico de toners retirados/devolvidos pelo armário via QR code.
+        🔍 Análise de Consumo e Criticidade por Toner
       </div>
-
       <div className="tabela-container">
         <table className="tabela-moderna">
           <thead>
             <tr>
-              <th>DATA / HORA</th>
-              <th>TIPO</th>
               <th>TONER</th>
-              <th style={{ textAlign: 'right' }}>QTD</th>
-              <th>RESPONSÁVEL</th>
+              <th style={{ textAlign: 'right' }}>SALDO</th>
+              <th style={{ textAlign: 'right' }}>IMPRESSORAS USANDO</th>
+              <th>CRITICIDADE</th>
             </tr>
           </thead>
           <tbody>
-            {movimentacoes.map((m, i) => (
-              <tr key={i}>
-                <td className="data-cell">{m.data || '—'}</td>
-                <td className="tipo-cell">
-                  {m.tipo === 'Retirada' || m.tipo === 'Saída' ? (
-                    <span className="badge-saida">
-                      <ArrowDownCircle size={14} /> Retirada
-                    </span>
-                  ) : (
-                    <span className="badge-entrada">
-                      <ArrowUpCircle size={14} /> Entrada
-                    </span>
-                  )}
-                </td>
-                <td className="toner-cell">{m.toner || '—'}</td>
-                <td className="numero-cell">{m.quantidade || 0}</td>
-                <td className="responsavel-cell">{m.responsavel || '—'}</td>
-              </tr>
-            ))}
+            {analise.map((item, i) => {
+              const saldo = Number(item.toner.estoque_atual);
+              const impressoras = item.impressoras.length;
+              const critico = saldo <= 1 && impressoras >= 5;
+              return (
+                <tr key={i} className={critico ? 'critico' : ''}>
+                  <td><strong>{item.toner.modelo_toner}</strong></td>
+                  <td className={`numero-cell ${saldo <= 2 ? 'baixo' : ''}`}>{saldo}</td>
+                  <td className="numero-cell">{impressoras}</td>
+                  <td>{critico ? '🔴 CRÍTICO' : impressoras >= 5 ? '🟡 ALTO' : '🟢 BAIXO'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -348,22 +273,59 @@ function Movimentacoes({ movimentacoes, carregando, erro }) {
   );
 }
 
-// ===== DASHBOARD PRINCIPAL =====
+function Movimentacoes({ movimentacoes, carregando, erro }) {
+  if (carregando) return <div className="loading">Carregando...</div>;
+  if (erro) return <div className="erro">Erro: {erro}</div>;
+
+  return (
+    <div className="aba-conteudo">
+      <div className="info-box">
+        📋 Histórico de toners retirados/devolvidos pelo armário via QR code.
+      </div>
+      {movimentacoes.length === 0 ? (
+        <div className="sem-dados-box">Nenhuma movimentação registrada ainda.</div>
+      ) : (
+        <div className="tabela-container">
+          <table className="tabela-moderna">
+            <thead>
+              <tr>
+                <th>DATA / HORA</th>
+                <th>TIPO</th>
+                <th>TONER</th>
+                <th style={{ textAlign: 'right' }}>QUANTIDADE</th>
+                <th>RESPONSÁVEL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movimentacoes.map((m, i) => (
+                <tr key={i}>
+                  <td className="data-cell">{m.data}</td>
+                  <td className="tipo-cell">{m.tipo}</td>
+                  <td className="toner-cell"><strong>{m.toner}</strong></td>
+                  <td className="numero-cell">{m.quantidade}</td>
+                  <td className="responsavel-cell">{m.responsavel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [abaAtiva, setAbaAtiva] = useState('monitoramento');
-  const { impressoras, estoque, repor, carregando, erro, recarregar } = useDashboard({ intervalo: 30000 });
+  const { impressoras, estoque, repor, carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
   const { dados: movimentacoes, carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({ intervalo: 30000 });
 
-  const impressorasArray = impressoras || [];
-  const online = impressorasArray.filter((p) => p && p.online).length;
+  const online = impressoras?.filter((p) => p.online).length || 0;
 
   return (
     <div className="dashboard-wrapper">
-      {/* HEADER */}
       <header className="dashboard-header-novo">
         <div className="header-esquerda">
           <div className="logo-secao">
-            <Printer size={32} className="logo-icon" />
             <div>
               <h1>Gestão de Impressoras & Toner - UNIFEB TI</h1>
               <p className="subtitle">Leitura SNMP · Última coleta {new Date().toLocaleTimeString('pt-BR')}</p>
@@ -381,48 +343,34 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* NAVEGAÇÃO */}
       <nav className="abas-nav-nova">
-        <button
-          className={`aba-btn ${abaAtiva === 'monitoramento' ? 'ativo' : ''}`}
-          onClick={() => setAbaAtiva('monitoramento')}
-        >
+        <button className={`aba-btn ${abaAtiva === 'monitoramento' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('monitoramento')}>
           📡 Monitoramento
         </button>
-        <button
-          className={`aba-btn ${abaAtiva === 'contadores' ? 'ativo' : ''}`}
-          onClick={() => setAbaAtiva('contadores')}
-        >
+        <button className={`aba-btn ${abaAtiva === 'contadores' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('contadores')}>
           📊 Contadores Diários
         </button>
-        <button
-          className={`aba-btn ${abaAtiva === 'estoque' ? 'ativo' : ''}`}
-          onClick={() => setAbaAtiva('estoque')}
-        >
+        <button className={`aba-btn ${abaAtiva === 'mapeamento' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('mapeamento')}>
+          🔗 Mapeamento
+        </button>
+        <button className={`aba-btn ${abaAtiva === 'estoque' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('estoque')}>
           📦 Estoque
         </button>
-        <button
-          className={`aba-btn ${abaAtiva === 'movimentacoes' ? 'ativo' : ''}`}
-          onClick={() => setAbaAtiva('movimentacoes')}
-        >
+        <button className={`aba-btn ${abaAtiva === 'vida-toner' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('vida-toner')}>
+          💧 Vida do Toner
+        </button>
+        <button className={`aba-btn ${abaAtiva === 'movimentacoes' ? 'ativo' : ''}`} onClick={() => setAbaAtiva('movimentacoes')}>
           📋 Movimentações
         </button>
       </nav>
 
-      {/* CONTEÚDO */}
       <main className="dashboard-main-novo">
-        {abaAtiva === 'monitoramento' && (
-          <Monitoramento dados={impressorasArray} carregando={carregando} erro={erro} />
-        )}
-        {abaAtiva === 'contadores' && (
-          <Contadores dados={impressorasArray} carregando={carregando} erro={erro} />
-        )}
-        {abaAtiva === 'estoque' && (
-          <Estoque estoque={estoque} repor={repor} carregando={carregando} erro={erro} />
-        )}
-        {abaAtiva === 'movimentacoes' && (
-          <Movimentacoes movimentacoes={movimentacoes} carregando={movCarregando} erro={movErro} />
-        )}
+        {abaAtiva === 'monitoramento' && <Monitoramento dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'contadores' && <Contadores dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'mapeamento' && <Mapeamento dados={impressoras} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'estoque' && <Estoque estoque={estoque} repor={repor} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'vida-toner' && <VidaToner impressoras={impressoras} estoque={estoque} carregando={carregando} erro={erro} />}
+        {abaAtiva === 'movimentacoes' && <Movimentacoes movimentacoes={movimentacoes} carregando={movCarregando} erro={movErro} />}
       </main>
     </div>
   );
