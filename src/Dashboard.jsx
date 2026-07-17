@@ -2,19 +2,9 @@ import React, { useState } from 'react';
 import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import {
   Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
-  LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
-  ArrowDownCircle, ArrowUpCircle, PlusCircle, PackageX,
-  Droplet, Clock, ChevronDown, ChevronRight,
+  CalendarDays, ArrowDownCircle, ArrowUpCircle, Clock, X
 } from 'lucide-react';
 import './App.css';
-
-const RENDIMENTO = {
-  'TK-322': 15000, 'TK-1175': 12000, 'TK-1147': 7200, 'TK-3122': 21000,
-  'GPR-22': 8400, 'GPR-31 BLACK': 19000, 'GPR-31 CYAN': 19000,
-  'GPR-31 MAGENTA': 19000, 'GPR-31 YELLOW': 19000, 'GPR-38': 56000,
-  'R04L BLACK': 10000, 'R04L CYAN': 10000, 'R04L MAGENTA': 10000, 'R04L YELLOW': 10000,
-  'SP-377 (SP310)': 6400, 'CF258X': 10000, 'ES 5112': 12000,
-};
 
 // ===== COMPONENTE: KPI Cards =====
 function KPICard({ icon: Icon, numero, label, cor = '#3b82f6' }) {
