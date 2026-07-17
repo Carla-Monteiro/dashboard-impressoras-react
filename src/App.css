@@ -296,10 +296,36 @@ code {
   font-weight: 500;
 }
 
-.filtros-botoes {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+/* ===== FILTRO SETORES ===== */
+.filtro-setores {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.filtro-select {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: white;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filtro-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.critico {
+  background: #fee2e2 !important;
 }
 
 .filtro-btn {
