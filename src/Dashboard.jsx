@@ -4,7 +4,7 @@ import './App.css';
 
 function Monitoramento({ dados, carregando, erro }) {
   if (carregando) return <div className="loading">Carregando...</div>;
-  if (erro) return <div className="erro">Erro: {erro}</div>;
+ 
 
   const filtrada = dados;
 
