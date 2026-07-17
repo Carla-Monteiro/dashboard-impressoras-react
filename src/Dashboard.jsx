@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import { useDashboard, useMovimentacoes } from './services/sheetsApi';
-import './App.css';
+import React, { useState, useMemo } from "react";
+import {
+  Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
+  LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
+  ArrowDownCircle, ArrowUpCircle, PlusCircle, PackageX,
+  Droplet, Clock, ChevronDown, ChevronRight,
+} from "lucide-react";
 
 function Monitoramento({ dados, carregando, erro }) {
   if (carregando) return <div className="loading">Carregando...</div>;
