@@ -154,6 +154,7 @@ export default function Dashboard() {
       const saldo = Number(e.estoque_atual) || 0;
       return { toner: e, saldo, usam, critico: saldo <= 1 && usam.length >= 5 };
     }).sort((a, b) => b.usam.length - a.usam.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estoque, impressoras]);
 
   const vidaKpi = useMemo(() => ({
