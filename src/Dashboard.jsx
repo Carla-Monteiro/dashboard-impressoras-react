@@ -3,7 +3,7 @@ import { useDashboard, useMovimentacoes } from './services/sheetsApi';
 import {
   Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
   LayoutGrid, CalendarDays, Filter, X, Package,
-  ArrowDownCircle, ArrowUpCircle, PackageX, Droplet, Clock, 
+  ArrowDownCircle, ArrowUpCircle, PackageX, Droplet,
   ChevronDown, ChevronRight, RefreshCw, Link2
 } from "lucide-react";
 
@@ -56,20 +56,6 @@ function KPI({ Icon, valor, label, cor }) {
         <div className="text-2xl font-bold tracking-tight" style={{ color: COR.ink, fontVariantNumeric: "tabular-nums" }}>{valor}</div>
         <div className="text-xs font-medium" style={{ color: COR.sub }}>{label}</div>
       </div>
-    </div>
-  );
-}
-
-function BarraNivel({ nivel }) {
-  if (nivel == null) return <span style={{ color: COR.faint }}>—</span>;
-  const num = Number(nivel);
-  const cor = num <= 15 ? COR.offline : num <= 35 ? COR.erro : COR.online;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 rounded-full" style={{ width: 70, background: COR.panelAlt, border: `1px solid ${COR.border}` }}>
-        <div className="h-full rounded-full" style={{ width: `${num}%`, background: cor }} />
-      </div>
-      <span className="mono text-xs font-semibold" style={{ color: cor, minWidth: 30 }}>{num}%</span>
     </div>
   );
 }
