@@ -5,6 +5,10 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  /* Linhas adicionadas para deixar o fundo igual ao da imagem */
+  background-color: #0f172a; /* Cor azul-escura de fundo */
+  color: #f8fafc;            /* Cor branca para as letras não sumirem */
 }
 
 code {
