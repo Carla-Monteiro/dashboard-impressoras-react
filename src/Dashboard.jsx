@@ -48,14 +48,14 @@ function Monitoramento({ dados, carregando, erro }) {
   }
 
   const online = dados.filter((p) => p.online).length;
-  const offline = dados.filter((p) => !p.online).length;
+  const offlineCount = dados.filter((p) => !p.online).length;
 
   return (
     <div className="aba-conteudo">
       <div className="kpi-grid">
         <KPICard icon={Printer} numero={dados.length} label="Impressoras" cor="#3b82f6" />
         <KPICard icon={Wifi} numero={online} label="Online" cor="#10b981" />
-        <KPICard icon={WifiOff} numero={offline} label="Offline" cor="#ef4444" />
+        <KPICard icon={WifiOff} numero={offlineCount} label="Offline" cor="#ef4444" />
         <KPICard
           icon={Activity}
           numero={dados.reduce((s, p) => s + (p.contador || 0), 0).toLocaleString('pt-BR')}
@@ -94,7 +94,7 @@ function Monitoramento({ dados, carregando, erro }) {
             className={`filtro-btn ${filtro === 'offline' ? 'ativo' : ''}`}
             onClick={() => setFiltro('offline')}
           >
-            <WifiOff size={16} /> Offline ({offline})
+            <WifiOff size={16} /> Offline ({offlineCount})
           </button>
         </div>
       </div>
@@ -356,7 +356,6 @@ export default function Dashboard() {
 
   const impressorasArray = impressoras || [];
   const online = impressorasArray.filter((p) => p && p.online).length;
-  const offline = impressorasArray.filter((p) => p && !p.online).length;
 
   return (
     <div className="dashboard-wrapper">
