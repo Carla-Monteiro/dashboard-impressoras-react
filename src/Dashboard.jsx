@@ -230,16 +230,34 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
   if (carregando) return <div className="loading">Carregando...</div>;
   if (erro) return <div className="erro">Erro: {erro}</div>;
 
+  // Cria mapa de toners com impressoras que usam
   const porToner = new Map();
-  impressoras.forEach((p) => {
-    if (p.toners?.length > 0) {
-      p.toners.forEach((t) => {
-        const chave = t.modelo_toner;
-        if (!porToner.has(chave)) porToner.set(chave, { toner: t, impressoras: [] });
-        porToner.get(chave).impressoras.push(p.setor);
-      });
-    }
-  });
+  
+  // Popula com dados do estoque
+  if (estoque && Array.isArray(estoque)) {
+    estoque.forEach((e) => {
+      const chave = e.modelo_toner;
+      if (!porToner.has(chave)) {
+        porToner.set(chave, { 
+          toner: e, 
+          impressoras: [],
+          saldo: Number(e.estoque_atual || 0)
+        });
+      }
+    });
+  }
+
+  // Adiciona impressoras que usam cada toner
+  if (impressoras && Array.isArray(impressoras)) {
+    impressoras.forEach((p) => {
+      if (p.toner) {
+        const chave = p.toner;
+        if (porToner.has(chave)) {
+          porToner.get(chave).impressoras.push(p.setor);
+        }
+      }
+    });
+  }
 
   const analise = Array.from(porToner.values()).sort((a, b) => b.impressoras.length - a.impressoras.length);
 
@@ -259,19 +277,25 @@ function VidaToner({ impressoras, estoque, carregando, erro }) {
             </tr>
           </thead>
           <tbody>
-            {analise.map((item, i) => {
-              const saldo = Number(item.toner.estoque_atual);
-              const impressoras = item.impressoras.length;
-              const critico = saldo <= 1 && impressoras >= 5;
+            {analise.length > 0 ? analise.map((item, i) => {
+              const saldo = item.saldo || Number(item.toner?.estoque_atual || 0);
+              const impCount = item.impressoras.length;
+              const critico = saldo <= 1 && impCount >= 5;
               return (
                 <tr key={i} className={critico ? 'critico' : ''}>
-                  <td><strong>{item.toner.modelo_toner}</strong></td>
+                  <td><strong>{item.toner?.modelo_toner || '—'}</strong></td>
                   <td className={`numero-cell ${saldo <= 2 ? 'baixo' : ''}`}>{saldo}</td>
-                  <td className="numero-cell">{impressoras}</td>
-                  <td>{critico ? '🔴 CRÍTICO' : impressoras >= 5 ? '🟡 ALTO' : '🟢 BAIXO'}</td>
+                  <td className="numero-cell">{impCount}</td>
+                  <td>{critico ? '🔴 CRÍTICO' : impCount >= 5 ? '🟡 ALTO' : '🟢 BAIXO'}</td>
                 </tr>
               );
-            })}
+            }) : (
+              <tr>
+                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                  Carregando dados de toner...
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
