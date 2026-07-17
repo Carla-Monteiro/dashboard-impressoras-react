@@ -350,10 +350,12 @@ function Movimentacoes({ movimentacoes, carregando, erro }) {
             </tbody>
           </table>
         </div>
-      )}
+ )}
     </div>
   </div>
 );
+}
+
 
 export default function Dashboard() {
   const [abaAtiva, setAbaAtiva] = useState('monitoramento');
