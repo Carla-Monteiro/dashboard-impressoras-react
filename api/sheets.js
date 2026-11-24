@@ -8,6 +8,7 @@ const ABAS = {
   contadores: 'Contadores Diários',
   movimentacoes: 'Respostas ao formulário 2',
   coleta: 'Status Coleta',   // gravada pelo leitor.py (hora da última coleta)
+  niveis: 'Nível Diário',     // gravada pelo leitor.py (nível de toner por dia)
 };
 
 function chave(texto) {
@@ -45,8 +46,8 @@ module.exports = async function handler(req, res) {
     try {
       linhas = await lerAba(sheets, nome);
     } catch (e) {
-      // "Status Coleta" só existe depois da 1ª execução do leitor.py novo
-      if (req.query.aba === 'coleta') return res.status(200).json([]);
+      // "Status Coleta" e "Nível Diário" só existem depois que o leitor.py novo roda
+      if (req.query.aba === 'coleta' || req.query.aba === 'niveis') return res.status(200).json([]);
       throw e;
     }
     if (linhas.length < 2) return res.status(200).json([]);
@@ -64,7 +65,8 @@ module.exports = async function handler(req, res) {
       dados = dados.filter((o) => String(o.modelo_toner).trim().toUpperCase() !== 'TOTAL');
     }
 
-    if (req.query.aba === 'contadores') {
+    // "Nível Diário" tem a mesma estrutura de "Contadores Diários" (uma coluna por dia)
+    if (req.query.aba === 'contadores' || req.query.aba === 'niveis') {
       // Pega TODAS as colunas a partir de F (índice 5)
       // Estrutura: A=Setor, B=Nome, C=IP, D=Marca, E=Modelo, F+=Datas
       const todasAsColunas = linhas[0].slice(5);
