@@ -10,7 +10,7 @@ import VisaoGeral from "./VisaoGeral";
 import Mapeamento from "./Mapeamento";
 import Estoque from "./Estoque";
 
-import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, BarraNivel, Aviso, Th } from "./ui";
+import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, BarraNivel, Aviso, Th, LinkIP } from "./ui";
 
 /* ============================================================
    DASHBOARD
@@ -243,13 +243,14 @@ export default function Dashboard() {
             </div>
             <div className="flex flex-wrap gap-2">
               {comProblema.map((p, i) => (
-                <button key={i} onClick={() => { setAba("monitoramento"); setBusca(p.setor); }}
-                  className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors"
+                <div key={i} role="button" tabIndex={0} onClick={() => { setAba("monitoramento"); setBusca(p.setor); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { setAba("monitoramento"); setBusca(p.setor); } }}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors"
                   style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.ink }}>
                   <span className="font-medium">{p.setor}</span>
                   <span style={{ color: COR.erro }}>{p.erro}</span>
-                  <span className="mono" style={{ color: COR.faint }}>{p.ip}</span>
-                </button>
+                  <LinkIP ip={p.ip} cor={COR.faint} />
+                </div>
               ))}
             </div>
           </div>
@@ -291,7 +292,7 @@ export default function Dashboard() {
                           <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
                             <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}><Dot cor={statusMeta[st].cor} pulse={st === "online"} /></td>
                             <td className="px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{p.setor}</td>
-                            <td className="mono px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{p.ip || "—"}</td>
+                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}><LinkIP ip={p.ip} /></td>
                             <td className="px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>
                               <span style={{ color: COR.ink }}>{p.marca}</span> <span className="mono text-xs">{p.modelo}</span>
                             </td>
