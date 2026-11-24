@@ -3,10 +3,12 @@ import {
   Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
   LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
   ArrowDownCircle, ArrowUpCircle, PackageX, Droplet, RefreshCw,
-  ChevronDown, ChevronRight, Link2, Clock, Gauge,
+  Link2, Clock, Gauge,
 } from "lucide-react";
 import { useDashboard, useMovimentacoes, familia } from "./services/sheetsApi";
 import VisaoGeral from "./VisaoGeral";
+import Mapeamento from "./Mapeamento";
+import Estoque from "./Estoque";
 
 import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, BarraNivel, Aviso, Th } from "./ui";
 
@@ -18,8 +20,6 @@ export default function Dashboard() {
   const [busca, setBusca] = useState("");
   const [setorSel, setSetorSel] = useState("todos");
   const [statusSel, setStatusSel] = useState("todos");
-  const [soRepor, setSoRepor] = useState(false);
-  const [expandido, setExpandido] = useState(null);
 
   const { impressoras = [], estoque = [], repor = [], comProblema = [], coleta = {}, carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
   const { dados: movimentacoes = [], carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({ intervalo: 30000 });
@@ -95,9 +95,6 @@ export default function Dashboard() {
   }), [comNivel]);
 
   const datas = impressoras[0]?.datas || [];
-  const estoqueVis = soRepor
-    ? estoque.filter((e) => Number(e.estoque_atual) <= Number(e.minimo_estipulado))
-    : estoque;
 
   /* idade da última coleta real (aba Status Coleta) */
   const minutosDesdeColeta = coleta.quando ? Math.round((Date.now() - coleta.quando.getTime()) / 60000) : null;
@@ -365,105 +362,10 @@ export default function Dashboard() {
               )}
 
               {/* MAPEAMENTO */}
-              {aba === "mapeamento" && (
-                <>
-                  <div className="mb-3 flex items-center gap-2 text-xs" style={{ color: COR.sub }}>
-                    <Link2 size={14} style={{ color: COR.accent }} /> Mapeamento de toners compatíveis por impressora.
-                  </div>
-                  <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-                    <table className="w-full border-collapse text-sm">
-                      <thead><tr style={{ background: COR.panelAlt }}>
-                        {["Setor", "Marca / Modelo", "Série", "Toner compatível"].map((h, i) => <Th key={i}>{h}</Th>)}
-                      </tr></thead>
-                      <tbody>
-                        {filtradas.map((p, i) => (
-                          <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                            <td className="px-3 py-3 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{p.setor}</td>
-                            <td className="px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>
-                              <span style={{ color: COR.ink }}>{p.marca}</span> <span className="mono text-xs">{p.modelo}</span>
-                            </td>
-                            <td className="mono px-3 py-3 text-xs" style={{ color: COR.faint, borderBottom: `1px solid ${COR.border}` }}>{p.serie || "—"}</td>
-                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                              <span className="mono rounded px-2 py-0.5 text-xs" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{p.toner || "—"}</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
+              {aba === "mapeamento" && <Mapeamento impressoras={impressoras} filtradas={filtradas} estoque={estoque} />}
 
               {/* ESTOQUE */}
-              {aba === "estoque" && (
-                <>
-                  {repor.length > 0 && (
-                    <div className="mb-3 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold"
-                      style={{ background: `${COR.offline}12`, border: `1px solid ${COR.offline}44`, color: COR.offline }}>
-                      <AlertTriangle size={16} /> {repor.length} toner(es) precisando reposição
-                    </div>
-                  )}
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-sm font-semibold" style={{ color: COR.ink }}>Estoque de toners</div>
-                    <button onClick={() => setSoRepor((v) => !v)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
-                      style={{ background: soRepor ? `${COR.offline}22` : COR.panel, color: soRepor ? COR.offline : COR.sub, border: `1px solid ${soRepor ? `${COR.offline}55` : COR.border}` }}>
-                      <PackageX size={14} /> {soRepor ? "Mostrando só p/ repor" : "Só os que precisam repor"}
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-                    <table className="w-full border-collapse text-sm">
-                      <thead><tr style={{ background: COR.panelAlt }}>
-                        {["Fabricante", "Modelo", "Estoque", "Mín.", "Impressoras", "Status"].map((h, i) => <Th key={i}>{h}</Th>)}
-                      </tr></thead>
-                      <tbody>
-                        {estoqueVis.map((e, i) => {
-                          const atual = Number(e.estoque_atual) || 0;
-                          const min = Number(e.minimo_estipulado) || 0;
-                          const precisa = atual <= min;
-                          const cor = precisa ? COR.offline : COR.online;
-                          const usam = impressorasPorToner(e.modelo_toner);
-                          const aberto = expandido === i;
-                          return (
-                            <React.Fragment key={i}>
-                              <tr className="row-hover transition-colors" style={{ background: COR.panel }}>
-                                <td className="px-3 py-2.5" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{e.fabricante}</td>
-                                <td className="px-3 py-2.5 font-medium" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{e.modelo_toner}</td>
-                                <td className="mono px-3 py-2.5 font-bold" style={{ color: precisa ? COR.offline : COR.ink, borderBottom: `1px solid ${COR.border}` }}>{atual}</td>
-                                <td className="mono px-3 py-2.5" style={{ color: COR.faint, borderBottom: `1px solid ${COR.border}` }}>{min}</td>
-                                <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                  {usam.length > 0 ? (
-                                    <button onClick={() => setExpandido(aberto ? null : i)} className="flex items-center gap-1 text-xs font-medium" style={{ color: COR.accent }}>
-                                      {aberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{usam.length} impressora{usam.length > 1 ? "s" : ""}
-                                    </button>
-                                  ) : <span className="text-xs" style={{ color: COR.faint }}>—</span>}
-                                </td>
-                                <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: cor, background: `${cor}1f`, border: `1px solid ${cor}44` }}>
-                                    {precisa ? <><AlertTriangle size={12} /> Repor</> : "OK"}
-                                  </span>
-                                </td>
-                              </tr>
-                              {aberto && (
-                                <tr style={{ background: COR.panelAlt }}>
-                                  <td colSpan={6} className="px-3 py-2" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {usam.map((p, j) => (
-                                        <span key={j} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs" style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.sub }}>
-                                          <Dot cor={statusMeta[statusDe(p)].cor} />{p.setor} <span className="mono" style={{ color: COR.faint }}>{p.ip}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
+              {aba === "estoque" && <Estoque estoque={estoque} impressoras={impressoras} movimentacoes={movimentacoes} />}
 
               {/* VIDA DO TONER */}
               {aba === "vida" && (
