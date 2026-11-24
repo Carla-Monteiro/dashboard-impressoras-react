@@ -3,7 +3,7 @@ import {
   AlertTriangle, WifiOff, Droplet, PackageX, CheckCircle2, Activity,
   ArrowDownCircle, ArrowUpCircle, ChevronRight, Printer, Wifi,
 } from "lucide-react";
-import { COR, KPI, Dot, BarraNivel, nf } from "./ui";
+import { COR, KPI, Dot, BarraNivel, nf, LinkIP } from "./ui";
 import { calcularConsumo } from "./services/sheetsApi";
 
 const NIVEL_CRITICO = 15;
@@ -42,7 +42,10 @@ function GrupoAtencao({ Icon, cor, titulo, itens, onVerTodos }) {
       <ul className="space-y-1">
         {visiveis.map((it, i) => (
           <li key={i}>
-            <button onClick={it.onClick} className="row-hover flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors"
+            {/* div em vez de button: o item tem um link (IP) dentro */}
+            <div role="button" tabIndex={0} onClick={it.onClick}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); it.onClick(); } }}
+              className="row-hover flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors"
               style={{ background: COR.panelAlt, border: `1px solid ${COR.border}` }}>
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium" style={{ color: COR.ink }}>{it.titulo}</div>
@@ -52,7 +55,7 @@ function GrupoAtencao({ Icon, cor, titulo, itens, onVerTodos }) {
                 {it.direita}
                 <ChevronRight size={14} style={{ color: COR.faint }} />
               </div>
-            </button>
+            </div>
           </li>
         ))}
       </ul>
@@ -194,14 +197,14 @@ export default function VisaoGeral({ impressoras, estoque, repor, movimentacoes,
             <>
               <GrupoAtencao Icon={AlertTriangle} cor={COR.erro} titulo="Com problema" onVerTodos={() => irPara("monitoramento", "")}
                 itens={comProblema.map((p) => ({
-                  titulo: p.setor, detalhe: `${p.marca || ""} ${p.modelo || ""} · ${p.ip}`,
+                  titulo: p.setor, detalhe: <>{p.marca} {p.modelo} · <LinkIP ip={p.ip} /></>,
                   direita: <span className="text-xs font-semibold" style={{ color: COR.erro }}>{p.erro}</span>,
                   onClick: () => irPara("monitoramento", p.ip),
                 }))} />
               <GrupoAtencao Icon={Droplet} cor={COR.offline} titulo={`Toner ≤ ${NIVEL_CRITICO}%`} onVerTodos={() => irPara("vida")}
                 itens={tonerBaixo.map((p) => ({
                   titulo: p.setor,
-                  detalhe: `${p.toner || "toner ?"} · ${p.toners.reduce((s, t) => s + (Number(t.estoque_atual) || 0), 0)} em estoque`,
+                  detalhe: <>{p.toner || "toner ?"} · {p.toners.reduce((s, t) => s + (Number(t.estoque_atual) || 0), 0)} em estoque · <LinkIP ip={p.ip} /></>,
                   direita: <BarraNivel nivel={p.nivel} />,
                   onClick: () => irPara("vida"),
                 }))} />
@@ -214,7 +217,7 @@ export default function VisaoGeral({ impressoras, estoque, repor, movimentacoes,
                 }))} />
               <GrupoAtencao Icon={WifiOff} cor={COR.offline} titulo="Offline" onVerTodos={() => irPara("monitoramento", "")}
                 itens={offline.map((p) => ({
-                  titulo: p.setor, detalhe: `${p.marca || ""} ${p.modelo || ""} · ${p.ip}`,
+                  titulo: p.setor, detalhe: <>{p.marca} {p.modelo} · <LinkIP ip={p.ip} /></>,
                   direita: <Dot cor={COR.offline} />,
                   onClick: () => irPara("monitoramento", p.ip),
                 }))} />
