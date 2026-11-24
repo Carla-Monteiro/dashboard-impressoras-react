@@ -1,5 +1,5 @@
 import React from "react";
-import { Wifi, WifiOff, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, AlertTriangle, ExternalLink } from "lucide-react";
 
 /* ============================================================
    PALETA
@@ -82,6 +82,19 @@ export function BarraNivel({ nivel }) {
       </div>
       <span className="mono text-xs font-semibold" style={{ color: cor, minWidth: 30 }}>{n}%</span>
     </div>
+  );
+}
+
+/* IP clicável: abre o painel web da impressora (só dentro da rede).
+   stopPropagation para não disparar o clique do cartão/linha onde está. */
+export function LinkIP({ ip, cor }) {
+  if (!ip) return <span style={{ color: COR.faint }}>—</span>;
+  return (
+    <a href={"http://" + ip} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+      title="Abrir o painel da impressora (só funciona dentro da rede)"
+      className="mono inline-flex items-center gap-1 hover:underline" style={{ color: cor || COR.sub }}>
+      {ip}<ExternalLink size={11} style={{ color: COR.faint }} />
+    </a>
   );
 }
 
