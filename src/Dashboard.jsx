@@ -3,113 +3,25 @@ import {
   Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
   LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
   ArrowDownCircle, ArrowUpCircle, PackageX, Droplet, RefreshCw,
-  ChevronDown, ChevronRight, Link2, Clock,
+  ChevronDown, ChevronRight, Link2, Clock, Gauge,
 } from "lucide-react";
-import { useDashboard, useMovimentacoes } from "./services/sheetsApi";
+import { useDashboard, useMovimentacoes, familia } from "./services/sheetsApi";
+import VisaoGeral from "./VisaoGeral";
 
-/* ============================================================
-   PALETA
-   ============================================================ */
-const COR = {
-  bg: "#0e1420", panel: "#161d2b", panelAlt: "#1b2434", border: "#26324a",
-  ink: "#e8edf6", sub: "#8b98b0", faint: "#5b6880",
-  online: "#34d399", offline: "#f43f5e", erro: "#f59e0b",
-  accent: "#38bdf8", accentSoft: "rgba(56,189,248,0.12)",
-};
-
-const statusMeta = {
-  online: { label: "Online", cor: COR.online, Icon: Wifi },
-  offline: { label: "Offline", cor: COR.offline, Icon: WifiOff },
-  erro: { label: "Problema", cor: COR.erro, Icon: AlertTriangle },
-};
-
-const nf = (n) => (n == null || n === "" ? "—" : Number(n).toLocaleString("pt-BR"));
-
-/* deriva o status a partir dos campos reais da planilha.
-   p.erro = problema específico do SNMP (sem papel, atolada...)
-   p.online = coluna STATUS que o leitor.py grava */
-const statusDe = (p) => {
-  if (p.erro) return "erro";       // online, mas com problema reportado
-  if (p.online) return "online";
-  return "offline";
-};
-
-/* ============================================================
-   COMPONENTES BASE
-   ============================================================ */
-function StatusBadge({ status, motivo }) {
-  const m = statusMeta[status];
-  const Icon = m.Icon;
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-      style={{ color: m.cor, background: `${m.cor}1f`, border: `1px solid ${m.cor}44` }}
-      title={motivo || m.label}>
-      <Icon size={13} strokeWidth={2.4} />{motivo || m.label}
-    </span>
-  );
-}
-
-function Dot({ cor, pulse }) {
-  return (
-    <span className="relative inline-flex" style={{ width: 9, height: 9 }}>
-      {pulse && <span className="absolute inline-flex h-full w-full rounded-full opacity-60"
-        style={{ background: cor, animation: "ping 1.6s cubic-bezier(0,0,0.2,1) infinite" }} />}
-      <span className="relative inline-flex rounded-full" style={{ width: 9, height: 9, background: cor }} />
-    </span>
-  );
-}
-
-function KPI({ Icon, valor, label, cor }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
-      <div className="flex items-center justify-center rounded-lg" style={{ width: 42, height: 42, background: `${cor}1c`, color: cor }}>
-        <Icon size={20} strokeWidth={2.2} />
-      </div>
-      <div className="leading-tight">
-        <div className="text-2xl font-bold tracking-tight" style={{ color: COR.ink, fontVariantNumeric: "tabular-nums" }}>{valor}</div>
-        <div className="text-xs font-medium" style={{ color: COR.sub }}>{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function BarraNivel({ nivel }) {
-  if (nivel == null || nivel === "") return <span style={{ color: COR.faint }}>—</span>;
-  const n = Number(nivel);
-  const cor = n <= 15 ? COR.offline : n <= 35 ? COR.erro : COR.online;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 rounded-full overflow-hidden" style={{ width: 70, background: COR.panelAlt, border: `1px solid ${COR.border}` }}>
-        <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, n))}%`, background: cor, transition: "width .3s" }} />
-      </div>
-      <span className="mono text-xs font-semibold" style={{ color: cor, minWidth: 30 }}>{n}%</span>
-    </div>
-  );
-}
-
-function Aviso({ children }) {
-  return <div className="rounded-xl px-4 py-10 text-center text-sm" style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.faint }}>{children}</div>;
-}
-
-function Th({ children, align = "left", ...rest }) {
-  return (
-    <th className={`px-3 py-3 text-${align} text-xs font-semibold uppercase tracking-wide`}
-      style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}`, ...rest.style }}>{children}</th>
-  );
-}
+import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, BarraNivel, Aviso, Th } from "./ui";
 
 /* ============================================================
    DASHBOARD
    ============================================================ */
 export default function Dashboard() {
-  const [aba, setAba] = useState("monitoramento");
+  const [aba, setAba] = useState("visao");
   const [busca, setBusca] = useState("");
   const [setorSel, setSetorSel] = useState("todos");
   const [statusSel, setStatusSel] = useState("todos");
   const [soRepor, setSoRepor] = useState(false);
   const [expandido, setExpandido] = useState(null);
 
-  const { impressoras = [], estoque = [], repor = [], comProblema = [], carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
+  const { impressoras = [], estoque = [], repor = [], comProblema = [], coleta = {}, carregando, erro, recarregar } = useDashboard({ intervalo: 60000 });
   const { dados: movimentacoes = [], carregando: movCarregando, erro: movErro, recarregar: movRecarregar } = useMovimentacoes({ intervalo: 30000 });
 
   const setores = useMemo(
@@ -130,11 +42,13 @@ export default function Dashboard() {
     });
   }, [impressoras, busca, setorSel, statusSel]);
 
+  /* online + offline + com problema = total (sem contar ninguém duas vezes) */
   const kpis = useMemo(() => ({
     total: impressoras.length,
-    online: impressoras.filter((p) => p.online).length,
-    offline: impressoras.filter((p) => !p.online && !p.erro).length,
-    erro: impressoras.filter((p) => p.erro).length,
+    online: impressoras.filter((p) => statusDe(p) === "online").length,
+    soPing: impressoras.filter((p) => statusDe(p) === "online" && p.soPing).length,
+    offline: impressoras.filter((p) => statusDe(p) === "offline").length,
+    erro: impressoras.filter((p) => statusDe(p) === "erro").length,
     totalPag: impressoras.reduce((s, p) => s + (Number(p.contador) || 0), 0),
   }), [impressoras]);
 
@@ -145,7 +59,11 @@ export default function Dashboard() {
   }), [estoque]);
 
   /* impressoras que usam determinado modelo de toner */
-  const impressorasPorToner = (modelo) => impressoras.filter((p) => p.toner === modelo);
+  /* compara pela família: "GPR-31 CYAN" no estoque ↔ "GPR-31" na impressora */
+  const impressorasPorToner = (modelo) => {
+    const f = familia(modelo);
+    return f ? impressoras.filter((p) => familia(p.toner) === f) : [];
+  };
 
   /* análise de criticidade por toner (mesma lógica da versão anterior) */
   const analiseToner = useMemo(() => {
@@ -181,6 +99,14 @@ export default function Dashboard() {
     ? estoque.filter((e) => Number(e.estoque_atual) <= Number(e.minimo_estipulado))
     : estoque;
 
+  /* idade da última coleta real (aba Status Coleta) */
+  const minutosDesdeColeta = coleta.quando ? Math.round((Date.now() - coleta.quando.getTime()) / 60000) : null;
+  const coletaAtrasada = minutosDesdeColeta != null && minutosDesdeColeta > ATRASO_MAX_MIN;
+  const corColeta = minutosDesdeColeta == null ? COR.faint : coletaAtrasada ? COR.offline : COR.online;
+  const textoColeta = minutosDesdeColeta == null ? "Coleta: sem informação"
+    : coletaAtrasada ? `Coleta parada há ${minutosDesdeColeta >= 120 ? Math.round(minutosDesdeColeta / 60) + " h" : minutosDesdeColeta + " min"}`
+    : "Coleta ativa";
+
   const temFiltro = setorSel !== "todos" || statusSel !== "todos" || busca.trim() !== "";
   const filtroImpressoras = ["monitoramento", "contadores", "mapeamento"].includes(aba);
   const carregandoAba = aba === "movimentacoes" ? movCarregando : carregando;
@@ -209,7 +135,9 @@ export default function Dashboard() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">Gestão de Impressoras &amp; Toner · UNIFEB TI</h1>
               <p className="text-xs" style={{ color: COR.sub }}>
-                Leitura SNMP · última coleta <span className="mono">{new Date().toLocaleString("pt-BR")}</span>
+                Leitura SNMP · última coleta{" "}
+                <span className="mono">{coleta.quando ? coleta.quando.toLocaleString("pt-BR") : "—"}</span>
+                {coleta.duracao != null && <span> · {coleta.duracao.toLocaleString("pt-BR")} s</span>}
               </p>
             </div>
           </div>
@@ -219,22 +147,23 @@ export default function Dashboard() {
               style={{ background: COR.panel, border: `1px solid ${COR.border}`, color: COR.sub }}>
               <RefreshCw size={14} style={{ animation: carregando ? "spin 1s linear infinite" : "none" }} /> Atualizar
             </button>
-            <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: COR.panel, border: `1px solid ${COR.border}` }}>
-              <Dot cor={kpis.online > 0 ? COR.online : COR.offline} pulse />
-              <span className="text-xs font-medium" style={{ color: COR.sub }}>Coleta ativa</span>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: COR.panel, border: `1px solid ${coletaAtrasada ? `${COR.offline}66` : COR.border}` }}
+              title={coletaAtrasada ? "O leitor.py não grava há mais de " + ATRASO_MAX_MIN + " min. Verifique a tarefa agendada no PC." : undefined}>
+              <Dot cor={corColeta} pulse={!coletaAtrasada && minutosDesdeColeta != null} />
+              <span className="text-xs font-medium" style={{ color: coletaAtrasada ? COR.offline : COR.sub }}>{textoColeta}</span>
             </div>
           </div>
         </header>
 
         {/* KPIs */}
-        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className={aba === "visao" ? "hidden" : "mb-6 grid grid-cols-2 gap-3 md:grid-cols-5"}>
           {aba === "movimentacoes" || aba === "estoque" ? (
             <>
               <KPI Icon={Package} valor={estoqueKpi.totalUnid} label="Toners em estoque" cor={COR.accent} />
               <KPI Icon={PackageX} valor={estoqueKpi.repor} label="Modelos p/ repor" cor={COR.offline} />
               <KPI Icon={LayoutGrid} valor={estoqueKpi.modelos} label="Modelos cadastrados" cor="#a78bfa" />
-              <KPI Icon={ArrowDownCircle} valor={movimentacoes.filter((m) => m.tipo === "Retirada").length} label="Retiradas" cor={COR.erro} />
-              <KPI Icon={ArrowUpCircle} valor={movimentacoes.filter((m) => m.tipo === "Entrada").length} label="Entradas" cor={COR.online} />
+              <KPI Icon={ArrowDownCircle} valor={movimentacoes.filter((m) => m.tipo === "saida").reduce((s, m) => s + m.quantidade, 0)} label="Unidades retiradas" cor={COR.erro} />
+              <KPI Icon={ArrowUpCircle} valor={movimentacoes.filter((m) => m.tipo === "entrada").reduce((s, m) => s + m.quantidade, 0)} label="Unidades de entrada" cor={COR.online} />
             </>
           ) : aba === "vida" ? (
             <>
@@ -244,10 +173,10 @@ export default function Dashboard() {
               <KPI Icon={PackageX} valor={vidaKpi.criticos} label="Modelos críticos" cor="#a78bfa" />
               <KPI Icon={Package} valor={estoqueKpi.totalUnid} label="Toners em estoque" cor={COR.online} />
             </>
-          ) : (
+          ) : aba === "visao" ? null : (
             <>
               <KPI Icon={LayoutGrid} valor={kpis.total} label="Impressoras" cor={COR.accent} />
-              <KPI Icon={Wifi} valor={kpis.online} label="Online" cor={COR.online} />
+              <KPI Icon={Wifi} valor={kpis.online} label={kpis.soPing ? `Online (${kpis.soPing} só ping)` : "Online"} cor={COR.online} />
               <KPI Icon={WifiOff} valor={kpis.offline} label="Offline" cor={COR.offline} />
               <KPI Icon={AlertTriangle} valor={kpis.erro} label="Com problema" cor={COR.erro} />
               <KPI Icon={Activity} valor={nf(kpis.totalPag)} label="Páginas (soma)" cor="#a78bfa" />
@@ -256,8 +185,9 @@ export default function Dashboard() {
         </div>
 
         {/* ABAS */}
-        <div className="mb-4 flex flex-wrap gap-1 rounded-xl p-1" style={{ background: COR.panel, border: `1px solid ${COR.border}`, width: "fit-content" }}>
+        <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl p-1" style={{ background: COR.panel, border: `1px solid ${COR.border}`, maxWidth: "100%", width: "fit-content" }}>
           {[
+            { id: "visao", label: "Visão Geral", Icon: Gauge },
             { id: "monitoramento", label: "Monitoramento", Icon: Activity },
             { id: "contadores", label: "Contadores Diários", Icon: CalendarDays },
             { id: "mapeamento", label: "Mapeamento", Icon: Link2 },
@@ -268,7 +198,7 @@ export default function Dashboard() {
             const ativa = aba === t.id;
             return (
               <button key={t.id} onClick={() => setAba(t.id)}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
                 style={{ background: ativa ? COR.accentSoft : "transparent", color: ativa ? COR.accent : COR.sub, border: `1px solid ${ativa ? COR.border : "transparent"}` }}>
                 <t.Icon size={16} strokeWidth={2.2} />{t.label}
               </button>
@@ -296,7 +226,7 @@ export default function Dashboard() {
               <option value="todos" style={{ background: COR.panel }}>Todos os status</option>
               <option value="online" style={{ background: COR.panel }}>Online</option>
               <option value="offline" style={{ background: COR.panel }}>Offline</option>
-              <option value="erro" style={{ background: COR.panel }}>Erro SNMP</option>
+              <option value="erro" style={{ background: COR.panel }}>Com problema</option>
             </select>
             {temFiltro && (
               <button onClick={() => { setBusca(""); setSetorSel("todos"); setStatusSel("todos"); }}
@@ -308,7 +238,7 @@ export default function Dashboard() {
         )}
 
         {/* ALERTAS — problemas detectados via SNMP */}
-        {!carregando && comProblema.length > 0 && (
+        {!carregando && aba !== "visao" && comProblema.length > 0 && (
           <div className="mb-4 rounded-xl p-4" style={{ background: `${COR.erro}0f`, border: `1px solid ${COR.erro}44` }}>
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold" style={{ color: COR.erro }}>
               <AlertTriangle size={16} />
@@ -336,6 +266,20 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* VISÃO GERAL */}
+              {aba === "visao" && (
+                <VisaoGeral
+                  impressoras={impressoras}
+                  estoque={estoque}
+                  repor={repor}
+                  movimentacoes={movimentacoes}
+                  kpis={kpis}
+                  impressorasPorToner={impressorasPorToner}
+                  statusDe={statusDe}
+                  irPara={(destino, termo) => { setAba(destino); if (termo != null) { setBusca(termo); setSetorSel("todos"); setStatusSel("todos"); } }}
+                />
+              )}
+
               {/* MONITORAMENTO */}
               {aba === "monitoramento" && (
                 <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
@@ -599,7 +543,7 @@ export default function Dashboard() {
               {aba === "movimentacoes" && (
                 <>
                   <div className="mb-3 flex items-center gap-2 text-xs" style={{ color: COR.sub }}>
-                    <Package size={14} style={{ color: COR.accent }} /> Histórico de toners retirados/devolvidos pelo armário via QR code.
+                    <Package size={14} style={{ color: COR.accent }} /> Histórico de toners retirados/devolvidos pelo armário via QR code · mais recentes primeiro.
                   </div>
                   {movimentacoes.length === 0 ? (
                     <Aviso>Nenhuma movimentação registrada ainda.<br />As retiradas entram pelo QR code do armário.</Aviso>
@@ -607,26 +551,28 @@ export default function Dashboard() {
                     <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
                       <table className="w-full border-collapse text-sm">
                         <thead><tr style={{ background: COR.panelAlt }}>
-                          {["Data / Hora", "Tipo", "Toner", "Quantidade", "Responsável"].map((h, i) => <Th key={i}>{h}</Th>)}
+                          {["Data / Hora", "Tipo", "Toner", "Qtd.", "Setor de destino", "Quem retirou"].map((h, i) => <Th key={i}>{h}</Th>)}
                         </tr></thead>
                         <tbody>
                           {movimentacoes.map((m, i) => {
-                            const cor = m.tipo === "Retirada" ? COR.offline : COR.online;
+                            const saida = m.tipo === "saida";
+                            const cor = saida ? COR.erro : m.tipo === "entrada" ? COR.online : COR.sub;
                             return (
                               <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
                                 <td className="mono px-3 py-2.5 whitespace-nowrap" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.data}</td>
                                 <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
                                   <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: cor, background: `${cor}1f`, border: `1px solid ${cor}44` }}>
-                                    {m.tipo === "Retirada" ? <ArrowDownCircle size={12} /> : <ArrowUpCircle size={12} />}{m.tipo}
+                                    {saida ? <ArrowDownCircle size={12} /> : <ArrowUpCircle size={12} />}{saida ? "Saída" : m.tipo === "entrada" ? "Entrada" : m.tipoTexto}
                                   </span>
                                 </td>
                                 <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
                                   <span className="mono rounded px-2 py-0.5 text-xs" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{m.toner}</span>
                                 </td>
                                 <td className="mono px-3 py-2.5 font-bold" style={{ color: cor, borderBottom: `1px solid ${COR.border}` }}>
-                                  {m.tipo === "Retirada" ? "-" : "+"}{m.quantidade}
+                                  {saida ? "−" : "+"}{m.quantidade}
                                 </td>
-                                <td className="px-3 py-2.5" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.responsavel || "—"}</td>
+                                <td className="px-3 py-2.5" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{m.setor || "—"}</td>
+                                <td className="px-3 py-2.5" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.quem || "—"}</td>
                               </tr>
                             );
                           })}
@@ -640,7 +586,7 @@ export default function Dashboard() {
           )}
 
         <footer className="mt-6 text-center text-xs" style={{ color: COR.faint }}>
-          Dados em tempo real via SNMP · atualização automática a cada 60s.
+          Leitura SNMP pelo leitor.py a cada 5 min · tela atualiza sozinha a cada 60 s.
         </footer>
       </div>
     </div>
