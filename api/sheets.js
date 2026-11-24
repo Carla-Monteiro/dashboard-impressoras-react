@@ -7,6 +7,7 @@ const ABAS = {
   estoque: 'Estoque Atual',
   contadores: 'Contadores Diários',
   movimentacoes: 'Respostas ao formulário 2',
+  coleta: 'Status Coleta',   // gravada pelo leitor.py (hora da última coleta)
 };
 
 function chave(texto) {
@@ -40,7 +41,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const sheets = getSheets();
-    const linhas = await lerAba(sheets, nome);
+    let linhas;
+    try {
+      linhas = await lerAba(sheets, nome);
+    } catch (e) {
+      // "Status Coleta" só existe depois da 1ª execução do leitor.py novo
+      if (req.query.aba === 'coleta') return res.status(200).json([]);
+      throw e;
+    }
     if (linhas.length < 2) return res.status(200).json([]);
 
     const cab = linhas[0].map(chave);
