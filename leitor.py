@@ -1,25 +1,43 @@
+"""
+Leitor de impressoras -> Google Sheets ("Gestão de Estoque TI")
+
+Mudanças desta versão:
+- Lê todas as impressoras EM PARALELO (antes: uma por vez, 2-3 min; agora ~15-20 s).
+- Não apaga mais o contador do dia: se a impressora estiver offline na última
+  execução do dia, mantém a última leitura válida em vez de gravar "Offline" por cima.
+- Grava "Online (PING)" na coluna STATUS quando a impressora só responde ping,
+  para o dashboard diferenciar de quem respondeu SNMP de verdade.
+- Grava a hora real da coleta na aba "Status Coleta" (o dashboard mostra isso).
+- Ping sem shell=True e só para IPs válidos (evita executar comando digitado na planilha).
+"""
 import asyncio
 import datetime
-import gspread
-import subprocess
+import ipaddress
+import platform
+import sys
 import time
+
+import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from puresnmp import Client, V2C, PyWrapper
-
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('credenciais.json', scope)
-client_sheets = gspread.authorize(creds)
-planilha = client_sheets.open("Gestão de Estoque TI")
 
 # ============================================================
 # CONFIGURAÇÃO
 # ============================================================
 
+NOME_PLANILHA = "Gestão de Estoque TI"
+ABA_MAPEAMENTO = "Mapeamento Impressoras"
+ABA_CONTADORES = "Contadores Diários"
+ABA_STATUS = "Status Coleta"
+
 oid_contador = '1.3.6.1.2.1.43.10.2.1.4.1.1'
 OID_NIVEL_TONER = '1.3.6.1.2.1.43.11.1.1.9.1.1'
 OID_MAX_TONER = '1.3.6.1.2.1.43.11.1.1.8.1.1'
-MARCAS_SEM_NIVEL = ["epson"]
 OID_ERRO_STATE = '1.3.6.1.2.1.25.3.5.1.2.1'
+MARCAS_SEM_NIVEL = ["epson"]
+
+TIMEOUT_SNMP = 10        # segundos (OKI e outras lentas)
+LEITURAS_SIMULTANEAS = 15
 
 BITS_ERRO = {
     0: "Sem papel",
@@ -41,47 +59,68 @@ BITS_ERRO = {
     16: "Consumível vazio",
 }
 
-COL_STATUS = 6
-COL_NIVEL = 8
-COL_ERRO = 9
+COL_STATUS = 6   # F
+COL_NIVEL = 8    # H
+COL_ERRO = 9     # I
+
+STATUS_SNMP = "Online"
+STATUS_PING = "Online (PING)"
+STATUS_OFF = "Offline"
+
+
+def conectar_planilha():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('credenciais.json', scope)
+    return gspread.authorize(creds).open(NOME_PLANILHA)
+
+
+def letra_coluna(n):
+    return gspread.utils.rowcol_to_a1(1, n).rstrip("1")
+
 
 # ============================================================
-# FUNÇÕES AUXILIARES
+# LEITURA DAS IMPRESSORAS
 # ============================================================
 
-def esta_online(ip):
-    """Verifica se impressora está online via PING"""
+def ip_valido(ip):
     try:
-        resultado = subprocess.run(
-            f"ping -n 1 -w 1000 {ip}",
-            capture_output=True,
-            timeout=2,
-            shell=True
-        )
-        return resultado.returncode == 0
-    except:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
         return False
 
 
-def carregar_impressoras():
-    aba = planilha.worksheet("Mapeamento Impressoras")
-    todas_linhas = aba.get_all_values()
-    linhas_dados = todas_linhas[1:]
+async def esta_online(ip):
+    """PING (1 pacote, 1 s). Sem shell: o IP vai como argumento, nunca como comando."""
+    if platform.system().lower() == "windows":
+        args = ["ping", "-n", "1", "-w", "1000", ip]
+    else:
+        args = ["ping", "-c", "1", "-W", "1", ip]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        return await asyncio.wait_for(proc.wait(), timeout=3) == 0
+    except Exception:
+        return False
+
+
+def carregar_impressoras(planilha):
+    linhas = planilha.worksheet(ABA_MAPEAMENTO).get_all_values()[1:]
     impressoras = []
-    for i, linha in enumerate(linhas_dados, start=2):
+    for i, linha in enumerate(linhas, start=2):
         if len(linha) < 4:
             continue
-        setor = linha[0].strip() if len(linha) > 0 else ""
-        ip = linha[1].strip() if len(linha) > 1 else ""
-        marca = linha[2].strip() if len(linha) > 2 else ""
-        modelo = linha[3].strip() if len(linha) > 3 else ""
-        serie = linha[4].strip() if len(linha) > 4 else ""
-        toner = linha[6].strip() if len(linha) > 6 else ""
+        cel = lambda j: linha[j].strip() if len(linha) > j else ""
+        ip = cel(1)
         if not ip or ip == "---":
             continue
+        if not ip_valido(ip):
+            print(f"⚠️  Linha {i}: IP inválido '{ip}' — ignorado")
+            continue
         impressoras.append({
-            "setor": setor, "ip": ip, "marca": marca, "modelo": modelo,
-            "serie": serie, "toner": toner, "linha": i,
+            "setor": cel(0), "ip": ip, "marca": cel(2), "modelo": cel(3),
+            "serie": cel(4), "toner": cel(6), "linha": i,
         })
     return impressoras
 
@@ -89,14 +128,13 @@ def carregar_impressoras():
 def decodificar_erros(valor, marca=""):
     """
     Converte o bitmask do hrPrinterDetectedErrorState em texto legível.
-    CORREÇÕES (False Positives):
-    - HP: ignora bit 0 ("Sem papel") — falso positivo
-    - Ricoh: ignora bit 1 ("Bandeja de papel aberta") — falso positivo
-    - Kyocera: ignora bit 5 ("Offline") — falso positivo
+    Falsos positivos conhecidos:
+    - HP: bit 0 ("Sem papel")
+    - Ricoh: bit 1 ("Bandeja aberta")
+    - Kyocera: bit 5 ("Offline")
     """
     if valor is None:
         return ""
-
     if isinstance(valor, int):
         valor = valor.to_bytes(2, "big")
     elif isinstance(valor, str):
@@ -105,116 +143,97 @@ def decodificar_erros(valor, marca=""):
         except Exception:
             return ""
 
-    problemas = []
     marca_lower = marca.strip().lower()
-    eh_hp = "hp" in marca_lower
-    eh_ricoh = "ricoh" in marca_lower
-    eh_kyocera = "kyocera" in marca_lower
+    ignorar = set()
+    if "hp" in marca_lower:
+        ignorar.add(0)
+    if "ricoh" in marca_lower:
+        ignorar.add(1)
+    if "kyocera" in marca_lower:
+        ignorar.add(5)
 
+    problemas = []
     for byte_i, byte in enumerate(valor):
         for bit_i in range(8):
             if byte & (0x80 >> bit_i):
                 pos = byte_i * 8 + bit_i
-
-                # FILTRO: HP ignora bit 0 ("Sem papel") — falso positivo
-                if eh_hp and pos == 0:
-                    continue
-
-                # FILTRO: Ricoh ignora bit 1 ("Bandeja aberta") — falso positivo
-                if eh_ricoh and pos == 1:
-                    continue
-
-                # FILTRO: Kyocera ignora bit 5 ("Offline") — falso positivo
-                if eh_kyocera and pos == 5:
-                    continue
-
-                problemas.append(BITS_ERRO.get(pos, f"bit {pos}"))
-
+                if pos not in ignorar:
+                    problemas.append(BITS_ERRO.get(pos, f"bit {pos}"))
     return " · ".join(problemas)
 
 
-async def ler_impressora(ip, marca=""):
-    """
-    Lê contador e nível de toner numa única sessão SNMP.
-    Se SNMP falhar, verifica se está online via PING.
-
-    TIMEOUT: 10 segundos (OKI + impressoras lentas).
-    """
-    try:
-        client = PyWrapper(Client(ip, V2C("public")))
-        contador = str(await asyncio.wait_for(client.get(oid_contador), timeout=10))
-    except Exception:
-        # SNMP falhou - verifica se está online via PING
-        if esta_online(ip):
-            return "", "", "", "Online (PING)"  # Online mas sem dados SNMP
-        else:
-            return "", "", "", "Offline"
-
-    # Chegou aqui = SNMP respondeu
-
-    # --- erro detectado ---
-    erro = ""
-    try:
-        erro_raw = await asyncio.wait_for(client.get(OID_ERRO_STATE), timeout=10)
-        erro = decodificar_erros(erro_raw, marca)
-    except Exception:
-        pass
-
-    # --- nível de toner ---
-    nivel = ""
-    if not any(m in marca.strip().lower() for m in MARCAS_SEM_NIVEL):
+async def ler_impressora(imp, limite):
+    """Lê contador, erro e nível de toner. Se SNMP falhar, tenta PING."""
+    ip, marca = imp["ip"], imp["marca"]
+    async with limite:
         try:
-            atual = int(await asyncio.wait_for(client.get(OID_NIVEL_TONER), timeout=10))
-            maximo = int(await asyncio.wait_for(client.get(OID_MAX_TONER), timeout=10))
-            if atual >= 0 and maximo > 0:
-                nivel = round((atual / maximo) * 100)
+            client = PyWrapper(Client(ip, V2C("public")))
+            contador = int(await asyncio.wait_for(client.get(oid_contador), timeout=TIMEOUT_SNMP))
+        except Exception:
+            status = STATUS_PING if await esta_online(ip) else STATUS_OFF
+            return {**imp, "contador": "", "nivel": "", "erro": "", "status": status}
+
+        erro = ""
+        try:
+            erro = decodificar_erros(
+                await asyncio.wait_for(client.get(OID_ERRO_STATE), timeout=TIMEOUT_SNMP), marca)
         except Exception:
             pass
 
-    return contador, nivel, erro, "Online"
+        nivel = ""
+        if not any(m in marca.strip().lower() for m in MARCAS_SEM_NIVEL):
+            try:
+                atual = int(await asyncio.wait_for(client.get(OID_NIVEL_TONER), timeout=TIMEOUT_SNMP))
+                maximo = int(await asyncio.wait_for(client.get(OID_MAX_TONER), timeout=TIMEOUT_SNMP))
+                if atual >= 0 and maximo > 0:
+                    nivel = round((atual / maximo) * 100)
+            except Exception:
+                pass
+
+        return {**imp, "contador": contador, "nivel": nivel, "erro": erro, "status": STATUS_SNMP}
 
 
-def atualizar_mapeamento(resultados):
-    """
-    Grava STATUS e NIVEL_TONER na aba Mapeamento Impressoras.
-    """
-    aba = planilha.worksheet("Mapeamento Impressoras")
+async def ler_todas(impressoras):
+    limite = asyncio.Semaphore(LEITURAS_SIMULTANEAS)
+    return await asyncio.gather(*(ler_impressora(imp, limite) for imp in impressoras))
 
-    col_status = gspread.utils.rowcol_to_a1(1, COL_STATUS).rstrip("1")
-    col_nivel = gspread.utils.rowcol_to_a1(1, COL_NIVEL).rstrip("1")
-    col_erro = gspread.utils.rowcol_to_a1(1, COL_ERRO).rstrip("1")
+
+# ============================================================
+# GRAVAÇÃO NA PLANILHA
+# ============================================================
+
+def atualizar_mapeamento(planilha, resultados):
+    """Grava STATUS, NIVEL_TONER e ERRO_DETECTADO em 'Mapeamento Impressoras'."""
+    aba = planilha.worksheet(ABA_MAPEAMENTO)
+    c_status, c_nivel, c_erro = letra_coluna(COL_STATUS), letra_coluna(COL_NIVEL), letra_coluna(COL_ERRO)
 
     requisicoes = [
-        {"range": f"{col_nivel}1", "values": [["NIVEL_TONER"]]},
-        {"range": f"{col_erro}1", "values": [["ERRO_DETECTADO"]]},
+        {"range": f"{c_nivel}1", "values": [["NIVEL_TONER"]]},
+        {"range": f"{c_erro}1", "values": [["ERRO_DETECTADO"]]},
     ]
-
     for r in resultados:
-        linha = r["linha"]
-        status = "Online" if "Online" in r["status"] else "Offline"
-
-        requisicoes.append({"range": f"{col_status}{linha}", "values": [[status]]})
-        requisicoes.append({"range": f"{col_nivel}{linha}", "values": [[r["nivel"]]]})
-        requisicoes.append({"range": f"{col_erro}{linha}", "values": [[r["erro"]]]})
-
+        l = r["linha"]
+        requisicoes.append({"range": f"{c_status}{l}", "values": [[r["status"]]]})
+        requisicoes.append({"range": f"{c_nivel}{l}", "values": [[r["nivel"]]]})
+        requisicoes.append({"range": f"{c_erro}{l}", "values": [[r["erro"]]]})
     aba.batch_update(requisicoes, value_input_option="USER_ENTERED")
 
 
-def atualizar_pivo(resultados, data_str):
+def atualizar_pivo(planilha, resultados, data_str):
+    """
+    Grava o contador de hoje em 'Contadores Diários' (uma coluna por dia).
+    Regra: só sobrescreve a célula quando há leitura nova. Se a impressora
+    está offline agora mas já foi lida hoje, a leitura anterior é mantida.
+    """
     COLS_FIXAS = ["Setor", "Nome", "IP", "Marca", "Modelo"]
-
     try:
-        aba = planilha.worksheet("Contadores Diários")
-    except Exception:
-        aba = planilha.add_worksheet(title="Contadores Diários", rows=200, cols=100)
+        aba = planilha.worksheet(ABA_CONTADORES)
+    except gspread.WorksheetNotFound:
+        aba = planilha.add_worksheet(title=ABA_CONTADORES, rows=200, cols=100)
         aba.update("A1", [COLS_FIXAS])
 
-    valores = aba.get_all_values()
-    if not valores:
-        valores = [COLS_FIXAS]
-
-    cabecalho = valores[0]
-    linhas = valores[1:] if len(valores) > 1 else []
+    valores = aba.get_all_values() or [COLS_FIXAS]
+    cabecalho, linhas = valores[0], valores[1:]
 
     ip_para_linha = {}
     for i, linha in enumerate(linhas):
@@ -224,11 +243,9 @@ def atualizar_pivo(resultados, data_str):
 
     novas = []
     for r in resultados:
-        if r["ip"] and r["ip"] not in ip_para_linha:
-            proxima_linha = len(linhas) + len(novas) + 2
-            ip_para_linha[r["ip"]] = proxima_linha
+        if r["ip"] not in ip_para_linha:
+            ip_para_linha[r["ip"]] = len(linhas) + len(novas) + 2
             novas.append([r["setor"], "", r["ip"], r["marca"], r["modelo"]])
-
     if novas:
         aba.update(f"A{len(linhas) + 2}", novas, value_input_option="USER_ENTERED")
 
@@ -236,77 +253,90 @@ def atualizar_pivo(resultados, data_str):
         col_idx = cabecalho.index(data_str)
     else:
         col_idx = len(cabecalho)
+        if col_idx + 1 > aba.col_count:
+            aba.add_cols(20)
         aba.update_cell(1, col_idx + 1, data_str)
 
-    col_letra = gspread.utils.rowcol_to_a1(1, col_idx + 1).rstrip("1")
+    # parte do que já está gravado hoje
+    total = len(linhas) + len(novas)
+    coluna = []
+    for i in range(total):
+        atual = linhas[i][col_idx] if i < len(linhas) and len(linhas[i]) > col_idx else ""
+        coluna.append([atual])
 
-    total_linhas = len(linhas) + len(novas) + 1
-    coluna = [[""] for _ in range(total_linhas - 1)]
     for r in resultados:
-        linha_planilha = ip_para_linha.get(r["ip"])
-        if linha_planilha:
-            valor = r["contador"] if r["status"] == "Online" else "Offline"
-            coluna[linha_planilha - 2] = [valor]
+        idx = ip_para_linha[r["ip"]] - 2
+        if r["status"] == STATUS_SNMP and r["contador"] != "":
+            coluna[idx] = [r["contador"]]                   # leitura nova
+        elif str(coluna[idx][0]).strip() in ("", STATUS_OFF):
+            coluna[idx] = [STATUS_OFF]                      # nunca lida hoje
+        # senão: mantém a leitura válida anterior do dia
 
-    aba.update(f"{col_letra}2", coluna, value_input_option="USER_ENTERED")
+    aba.update(f"{letra_coluna(col_idx + 1)}2", coluna, value_input_option="USER_ENTERED")
+
+
+def atualizar_status_coleta(planilha, resultados, inicio, duracao):
+    """Aba pequena que o dashboard lê para mostrar a hora real da coleta."""
+    try:
+        aba = planilha.worksheet(ABA_STATUS)
+    except gspread.WorksheetNotFound:
+        aba = planilha.add_worksheet(title=ABA_STATUS, rows=10, cols=2)
+
+    online_snmp = sum(1 for r in resultados if r["status"] == STATUS_SNMP)
+    online_ping = sum(1 for r in resultados if r["status"] == STATUS_PING)
+    aba.update("A1", [
+        ["chave", "valor"],
+        ["ultima_coleta", inicio.strftime("%d/%m/%Y %H:%M:%S")],
+        ["duracao_segundos", round(duracao, 1)],
+        ["total", len(resultados)],
+        ["online_snmp", online_snmp],
+        ["online_ping", online_ping],
+        ["offline", len(resultados) - online_snmp - online_ping],
+    ], value_input_option="RAW")
 
 
 # ============================================================
 # EXECUÇÃO
 # ============================================================
 
-print("Carregando impressoras...\n")
-impressoras = carregar_impressoras()
-print(f"{len(impressoras)} encontradas.\n")
+def main():
+    inicio = datetime.datetime.now()
+    planilha = conectar_planilha()
 
-if not impressoras:
-    print("❌ Nenhuma!")
-    exit()
+    print("Carregando impressoras...")
+    impressoras = carregar_impressoras(planilha)
+    print(f"{len(impressoras)} encontradas.\n")
+    if not impressoras:
+        print("❌ Nenhuma impressora na aba de mapeamento!")
+        return 1
 
-print("Consultando impressoras...\n")
-resultados = []
-com_nivel = 0
-com_erro = 0
-tempo_inicio = time.time()
+    print(f"Consultando ({LEITURAS_SIMULTANEAS} por vez)...\n")
+    t0 = time.time()
+    resultados = asyncio.run(ler_todas(impressoras))
+    duracao = time.time() - t0
 
-for i, imp in enumerate(impressoras, 1):
-    print(f"[{i}/{len(impressoras)}] Lendo {imp['ip']} - {imp['marca']} {imp['modelo']}...")
-    contador, nivel, erro, status = asyncio.run(ler_impressora(imp["ip"], imp["marca"]))
-
-    extra = f" · toner {nivel}%" if nivel != "" else ""
-    print(f"  Resultado: {status} {contador}{extra}")
-    if erro:
-        print(f"  ⚠️  {erro}")
-    print()
-
-    if nivel != "":
-        com_nivel += 1
-    if erro:
-        com_erro += 1
-
-    resultados.append({
-        **imp, "contador": contador, "nivel": nivel,
-        "erro": erro, "status": status,
-    })
-
-tempo_total = time.time() - tempo_inicio
-hoje = datetime.datetime.now().strftime("%d/%m/%Y")
-
-print()
-atualizar_mapeamento(resultados)
-print("✅ STATUS, NIVEL_TONER e ERRO_DETECTADO atualizados em 'Mapeamento Impressoras'")
-print()
-atualizar_pivo(resultados, hoje)
-print("✅ Contadores gravados em 'Contadores Diários'")
-
-online = sum(1 for r in resultados if "Online" in r["status"])
-print(f"\n📊 {online}/{len(resultados)} online · {com_nivel} com nível de toner · {com_erro} com problema")
-print(f"⏱️  Tempo total: {tempo_total:.1f}s\n")
-
-if com_erro:
-    print("⚠️  Impressoras com problema:")
     for r in resultados:
+        extra = f" · toner {r['nivel']}%" if r["nivel"] != "" else ""
+        print(f"  {r['ip']:<15} {r['setor'][:35]:<35} {r['status']} {r['contador']}{extra}")
         if r["erro"]:
-            print(f"   {r['setor']} ({r['ip']}): {r['erro']}")
+            print(f"  {'':<15} ⚠️  {r['erro']}")
 
-print("\n✅ Concluído!")
+    atualizar_mapeamento(planilha, resultados)
+    print("\n✅ STATUS, NIVEL_TONER e ERRO_DETECTADO atualizados")
+    atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"))
+    print("✅ Contadores gravados em 'Contadores Diários'")
+    atualizar_status_coleta(planilha, resultados, inicio, duracao)
+    print("✅ Hora da coleta gravada em 'Status Coleta'")
+
+    snmp = sum(1 for r in resultados if r["status"] == STATUS_SNMP)
+    ping = sum(1 for r in resultados if r["status"] == STATUS_PING)
+    com_nivel = sum(1 for r in resultados if r["nivel"] != "")
+    com_erro = sum(1 for r in resultados if r["erro"])
+    print(f"\n📊 {snmp} SNMP · {ping} só PING · {len(resultados) - snmp - ping} offline"
+          f" · {com_nivel} com nível de toner · {com_erro} com problema")
+    print(f"⏱️  Leitura: {duracao:.1f}s\n✅ Concluído!")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
