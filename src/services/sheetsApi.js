@@ -237,7 +237,11 @@ export function useMovimentacoes({ intervalo } = {}) {
 /* ------------------------------------------------------------
    Consumo (páginas impressas) a partir dos contadores diários.
    O volume de um dia = contador do dia − última leitura anterior.
-   Leituras que diminuem (troca de placa/reset) são ignoradas.
+   Leituras que diminuem (troca de placa/reset) são ignoradas, e também
+   saltos com mais de MAX_LACUNA_DIAS sem leitura (ex.: coleta parada por
+   semanas) — senão todo o período parado cairia num único dia. */
+const MAX_LACUNA_DIAS = 4;
+/*
    ------------------------------------------------------------ */
 export function calcularConsumo(impressoras, dias = 30) {
   const datas = impressoras.find((p) => p.datas?.length)?.datas || [];
@@ -253,15 +257,18 @@ export function calcularConsumo(impressoras, dias = 30) {
 
   impressoras.forEach((p) => {
     let anterior = null;
+    let dataAnterior = null;
     (p.contadores || []).forEach((v, i) => {
       if (v == null) return;
-      if (anterior != null && v >= anterior && objs[i] && objs[i] >= limite) {
+      const lacunaOk = dataAnterior && objs[i] && (objs[i] - dataAnterior) / 86400000 <= MAX_LACUNA_DIAS;
+      if (anterior != null && lacunaOk && v >= anterior && objs[i] >= limite) {
         const delta = v - anterior;
         porDia.set(datas[i], (porDia.get(datas[i]) || 0) + delta);
         const s = p.setor || '—';
         porSetor.set(s, (porSetor.get(s) || 0) + delta);
       }
       anterior = v;
+      dataAnterior = objs[i];
     });
   });
 
