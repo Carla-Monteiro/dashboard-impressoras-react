@@ -230,7 +230,7 @@ def atualizar_pivo(planilha, resultados, data_str):
         aba = planilha.worksheet(ABA_CONTADORES)
     except gspread.WorksheetNotFound:
         aba = planilha.add_worksheet(title=ABA_CONTADORES, rows=200, cols=100)
-        aba.update("A1", [COLS_FIXAS])
+        aba.update(range_name="A1", values=[COLS_FIXAS])
 
     valores = aba.get_all_values() or [COLS_FIXAS]
     cabecalho, linhas = valores[0], valores[1:]
@@ -247,7 +247,7 @@ def atualizar_pivo(planilha, resultados, data_str):
             ip_para_linha[r["ip"]] = len(linhas) + len(novas) + 2
             novas.append([r["setor"], "", r["ip"], r["marca"], r["modelo"]])
     if novas:
-        aba.update(f"A{len(linhas) + 2}", novas, value_input_option="USER_ENTERED")
+        aba.update(range_name=f"A{len(linhas) + 2}", values=novas, value_input_option="USER_ENTERED")
 
     if data_str in cabecalho:
         col_idx = cabecalho.index(data_str)
@@ -272,7 +272,7 @@ def atualizar_pivo(planilha, resultados, data_str):
             coluna[idx] = [STATUS_OFF]                      # nunca lida hoje
         # senão: mantém a leitura válida anterior do dia
 
-    aba.update(f"{letra_coluna(col_idx + 1)}2", coluna, value_input_option="USER_ENTERED")
+    aba.update(range_name=f"{letra_coluna(col_idx + 1)}2", values=coluna, value_input_option="USER_ENTERED")
 
 
 def atualizar_status_coleta(planilha, resultados, inicio, duracao):
@@ -284,7 +284,7 @@ def atualizar_status_coleta(planilha, resultados, inicio, duracao):
 
     online_snmp = sum(1 for r in resultados if r["status"] == STATUS_SNMP)
     online_ping = sum(1 for r in resultados if r["status"] == STATUS_PING)
-    aba.update("A1", [
+    aba.update(range_name="A1", values=[
         ["chave", "valor"],
         ["ultima_coleta", inicio.strftime("%d/%m/%Y %H:%M:%S")],
         ["duracao_segundos", round(duracao, 1)],
