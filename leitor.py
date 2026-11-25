@@ -42,6 +42,12 @@ MARCAS_SEM_NIVEL = ["epson"]
 TIMEOUT_SNMP = 10        # segundos (OKI e outras lentas)
 LEITURAS_SIMULTANEAS = 15
 
+# Limpeza automática das abas de histórico (Contadores Diários / Nível Diário):
+# apaga a linha de um IP que não está mais no Mapeamento (ou linha duplicada)
+# quando ela está há mais de DIAS_PARA_APAGAR dias sem nenhuma leitura.
+# As impressoras do Mapeamento nunca são apagadas, mesmo se ficarem offline.
+DIAS_PARA_APAGAR = 30
+
 BITS_ERRO = {
     0: "Sem papel",
     1: "Bandeja de papel aberta",
@@ -71,10 +77,28 @@ STATUS_PING = "Online (PING)"
 STATUS_OFF = "Offline"
 
 
+class ClienteComRepeticao(gspread.http_client.HTTPClient):
+    """Repete a chamada quando o Google dá erro temporário (502, 503, 429, timeout).
+    O 502 vem como página HTML e o gspread o registra com código -1."""
+    ESPERAS = (5, 15, 30)  # segundos; total < 1 min para caber no ciclo de 5 min
+
+    def request(self, *args, **kwargs):
+        for espera in self.ESPERAS + (None,):
+            try:
+                return super().request(*args, **kwargs)
+            except gspread.exceptions.APIError as e:
+                codigo = getattr(e, "code", 0) or 0
+                temporario = codigo in (-1, 408, 429) or codigo >= 500
+                if not temporario or espera is None:
+                    raise
+                print(f"   ↻ Google respondeu {codigo}; tentando de novo em {espera}s...")
+                time.sleep(espera)
+
+
 def conectar_planilha():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('credenciais.json', scope)
-    return gspread.authorize(creds).open(NOME_PLANILHA)
+    return gspread.authorize(creds, http_client=ClienteComRepeticao).open(NOME_PLANILHA)
 
 
 def letra_coluna(n):
@@ -222,6 +246,62 @@ def atualizar_mapeamento(planilha, resultados):
     aba.batch_update(requisicoes, value_input_option="USER_ENTERED")
 
 
+def _ultima_leitura(linha, datas):
+    """Data mais recente com valor válido na linha (None se nunca teve)."""
+    ultima = None
+    for j, d in datas.items():
+        v = linha[j].strip() if len(linha) > j else ""
+        if v and v not in (STATUS_OFF, "-") and (ultima is None or d > ultima):
+            ultima = d
+    return ultima
+
+
+def limpar_linhas_antigas(planilha, aba, valores, ips_ativos, hoje):
+    """Apaga do pivô as linhas sem uso há mais de DIAS_PARA_APAGAR dias.
+    Devolve True se apagou alguma coisa (aí os valores precisam ser relidos)."""
+    if len(ips_ativos) < 5:  # mapeamento veio vazio/estranho: não arrisca
+        return False
+    cabecalho, linhas = valores[0], valores[1:]
+    datas = {}
+    for j, h in enumerate(cabecalho):
+        try:
+            datas[j] = datetime.datetime.strptime(h.strip(), "%d/%m/%Y").date()
+        except ValueError:
+            pass
+    limite = hoje - datetime.timedelta(days=DIAS_PARA_APAGAR)
+
+    # a linha "em uso" de cada IP é a última (é nela que atualizar_pivo grava)
+    em_uso = {}
+    for i, linha in enumerate(linhas):
+        ip = linha[2].strip() if len(linha) > 2 else ""
+        if ip in ips_ativos:
+            em_uso[ip] = i
+
+    apagar = []
+    for i, linha in enumerate(linhas):
+        ip = linha[2].strip() if len(linha) > 2 else ""
+        if ip in ips_ativos and em_uso[ip] == i:
+            continue
+        ultima = _ultima_leitura(linha, datas)
+        if ultima is None or ultima < limite:
+            apagar.append((i + 2, ip or "(sem IP)", ultima))
+    if not apagar:
+        return False
+
+    # uma chamada só, de baixo para cima, para os números de linha não mudarem
+    pedidos = [{"deleteDimension": {"range": {
+        "sheetId": aba.id, "dimension": "ROWS",
+        "startIndex": n - 1, "endIndex": n}}} for n, _, _ in sorted(apagar, reverse=True)]
+    planilha.batch_update({"requests": pedidos})
+    print(f"   🧹 {len(apagar)} linha(s) antiga(s) apagada(s) de '{aba.title}' "
+          f"(sem leitura há mais de {DIAS_PARA_APAGAR} dias)")
+    for n, ip, ultima in apagar[:10]:
+        print(f"      linha {n}: {ip} · última leitura {ultima.strftime('%d/%m/%Y') if ultima else 'nunca'}")
+    if len(apagar) > 10:
+        print(f"      ... e mais {len(apagar) - 10}")
+    return True
+
+
 def atualizar_pivo(planilha, resultados, data_str, nome_aba=ABA_CONTADORES, campo="contador"):
     """
     Grava o valor de hoje numa aba "pivô" (uma linha por impressora, uma coluna por dia).
@@ -237,6 +317,10 @@ def atualizar_pivo(planilha, resultados, data_str, nome_aba=ABA_CONTADORES, camp
         aba.update(range_name="A1", values=[COLS_FIXAS])
 
     valores = aba.get_all_values() or [COLS_FIXAS]
+    hoje = datetime.datetime.strptime(data_str, "%d/%m/%Y").date()
+    if len(valores) > 1 and limpar_linhas_antigas(
+            planilha, aba, valores, {r["ip"] for r in resultados}, hoje):
+        valores = aba.get_all_values() or [COLS_FIXAS]
     cabecalho, linhas = valores[0], valores[1:]
 
     ip_para_linha = {}
@@ -251,6 +335,11 @@ def atualizar_pivo(planilha, resultados, data_str, nome_aba=ABA_CONTADORES, camp
             ip_para_linha[r["ip"]] = len(linhas) + len(novas) + 2
             novas.append([r["setor"], "", r["ip"], r["marca"], r["modelo"]])
     if novas:
+        print(f"   + {len(novas)} linha(s) nova(s) em '{nome_aba}': " + ", ".join(n[2] for n in novas))
+        # a grade da aba tem tamanho fixo: cria linhas antes de escrever além dela
+        faltam = len(linhas) + len(novas) + 1 - aba.row_count
+        if faltam > 0:
+            aba.add_rows(faltam + 20)
         aba.update(range_name=f"A{len(linhas) + 2}", values=novas, value_input_option="USER_ENTERED")
 
     if data_str in cabecalho:
@@ -329,8 +418,13 @@ def main():
 
     atualizar_mapeamento(planilha, resultados)
     print("\n✅ STATUS, NIVEL_TONER e ERRO_DETECTADO atualizados")
-    atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"))
-    print("✅ Contadores gravados em 'Contadores Diários'")
+    falhas = 0
+    try:
+        atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"))
+        print("✅ Contadores gravados em 'Contadores Diários'")
+    except Exception as e:  # não deixa o histórico travar status/mapeamento
+        falhas += 1
+        print(f"❌ Não consegui gravar 'Contadores Diários': {e}")
     try:
         atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"), ABA_NIVEIS, "nivel")
         print("✅ Nível de toner gravado em 'Nível Diário'")
@@ -345,7 +439,11 @@ def main():
     com_erro = sum(1 for r in resultados if r["erro"])
     print(f"\n📊 {snmp} SNMP · {ping} só PING · {len(resultados) - snmp - ping} offline"
           f" · {com_nivel} com nível de toner · {com_erro} com problema")
-    print(f"⏱️  Leitura: {duracao:.1f}s\n✅ Concluído!")
+    print(f"⏱️  Leitura: {duracao:.1f}s")
+    if falhas:
+        print("⚠️  Concluído com falha ao gravar o histórico (veja acima).")
+        return 1
+    print("✅ Concluído!")
     return 0
 
 
