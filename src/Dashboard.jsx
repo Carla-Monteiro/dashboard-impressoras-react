@@ -3,14 +3,16 @@ import {
   Search, Printer, Wifi, WifiOff, AlertTriangle, Activity,
   LayoutGrid, CalendarDays, TrendingUp, Filter, X, Package,
   ArrowDownCircle, ArrowUpCircle, PackageX, Droplet, RefreshCw,
-  Link2, Clock, Gauge,
+  Link2, Gauge,
 } from "lucide-react";
 import { useDashboard, useMovimentacoes, familia } from "./services/sheetsApi";
 import VisaoGeral from "./VisaoGeral";
 import Mapeamento from "./Mapeamento";
 import Estoque from "./Estoque";
+import VidaToner from "./VidaToner";
+import Movimentacoes from "./Movimentacoes";
 
-import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, BarraNivel, Aviso, Th, LinkIP } from "./ui";
+import { COR, ATRASO_MAX_MIN, statusMeta, nf, statusDe, StatusBadge, Dot, KPI, Aviso, Th, LinkIP } from "./ui";
 
 /* ============================================================
    DASHBOARD
@@ -64,35 +66,6 @@ export default function Dashboard() {
     const f = familia(modelo);
     return f ? impressoras.filter((p) => familia(p.toner) === f) : [];
   };
-
-  /* análise de criticidade por toner (mesma lógica da versão anterior) */
-  const analiseToner = useMemo(() => {
-    return estoque.map((e) => {
-      const usam = impressorasPorToner(e.modelo_toner);
-      const saldo = Number(e.estoque_atual) || 0;
-      return { toner: e, saldo, usam, critico: saldo <= 1 && usam.length >= 5 };
-    }).sort((a, b) => b.usam.length - a.usam.length);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estoque, impressoras]);
-
-  const vidaKpi = useMemo(() => ({
-    criticos: analiseToner.filter((a) => a.critico).length,
-    alto: analiseToner.filter((a) => !a.critico && a.usam.length >= 5).length,
-    modelos: analiseToner.length,
-  }), [analiseToner]);
-
-  /* impressoras que reportaram nivel de toner via SNMP */
-  const comNivel = useMemo(
-    () => impressoras.filter((p) => p.nivel != null && p.nivel !== "")
-      .sort((a, b) => Number(a.nivel) - Number(b.nivel)),
-    [impressoras]
-  );
-
-  const nivelKpi = useMemo(() => ({
-    monitoradas: comNivel.length,
-    criticas: comNivel.filter((p) => Number(p.nivel) <= 15).length,
-    atencao: comNivel.filter((p) => Number(p.nivel) > 15 && Number(p.nivel) <= 35).length,
-  }), [comNivel]);
 
   const datas = impressoras[0]?.datas || [];
 
@@ -153,8 +126,8 @@ export default function Dashboard() {
         </header>
 
         {/* KPIs */}
-        <div className={aba === "visao" ? "hidden" : "mb-6 grid grid-cols-2 gap-3 md:grid-cols-5"}>
-          {aba === "movimentacoes" || aba === "estoque" ? (
+        <div className={["visao", "vida", "movimentacoes"].includes(aba) ? "hidden" : "mb-6 grid grid-cols-2 gap-3 md:grid-cols-5"}>
+          {aba === "estoque" ? (
             <>
               <KPI Icon={Package} valor={estoqueKpi.totalUnid} label="Toners em estoque" cor={COR.accent} />
               <KPI Icon={PackageX} valor={estoqueKpi.repor} label="Modelos p/ repor" cor={COR.offline} />
@@ -162,15 +135,7 @@ export default function Dashboard() {
               <KPI Icon={ArrowDownCircle} valor={movimentacoes.filter((m) => m.tipo === "saida").reduce((s, m) => s + m.quantidade, 0)} label="Unidades retiradas" cor={COR.erro} />
               <KPI Icon={ArrowUpCircle} valor={movimentacoes.filter((m) => m.tipo === "entrada").reduce((s, m) => s + m.quantidade, 0)} label="Unidades de entrada" cor={COR.online} />
             </>
-          ) : aba === "vida" ? (
-            <>
-              <KPI Icon={Droplet} valor={nivelKpi.monitoradas} label="Com nível SNMP" cor={COR.accent} />
-              <KPI Icon={AlertTriangle} valor={nivelKpi.criticas} label="Nível crítico (≤15%)" cor={COR.offline} />
-              <KPI Icon={Clock} valor={nivelKpi.atencao} label="Atenção (≤35%)" cor={COR.erro} />
-              <KPI Icon={PackageX} valor={vidaKpi.criticos} label="Modelos críticos" cor="#a78bfa" />
-              <KPI Icon={Package} valor={estoqueKpi.totalUnid} label="Toners em estoque" cor={COR.online} />
-            </>
-          ) : aba === "visao" ? null : (
+          ) : ["visao", "vida", "movimentacoes"].includes(aba) ? null : (
             <>
               <KPI Icon={LayoutGrid} valor={kpis.total} label="Impressoras" cor={COR.accent} />
               <KPI Icon={Wifi} valor={kpis.online} label={kpis.soPing ? `Online (${kpis.soPing} só ping)` : "Online"} cor={COR.online} />
@@ -369,122 +334,10 @@ export default function Dashboard() {
               {aba === "estoque" && <Estoque estoque={estoque} impressoras={impressoras} movimentacoes={movimentacoes} />}
 
               {/* VIDA DO TONER */}
-              {aba === "vida" && (
-                <>
-                  {/* --- Níveis reais via SNMP --- */}
-                  <div className="mb-3 flex items-center gap-2 text-xs" style={{ color: COR.sub }}>
-                    <Droplet size={14} style={{ color: COR.accent }} />
-                    Nível lido via SNMP (prtMarkerSuppliesLevel). Ordenado do mais vazio ao mais cheio. Impressoras que não reportam nível não aparecem aqui.
-                  </div>
-                  <div className="mb-6 overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-                    <table className="w-full border-collapse text-sm">
-                      <thead><tr style={{ background: COR.panelAlt }}>
-                        {["Setor", "Toner", "Nível", "Contador", "Status"].map((h, i) => <Th key={i}>{h}</Th>)}
-                      </tr></thead>
-                      <tbody>
-                        {comNivel.map((p, i) => (
-                          <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                              <div className="font-medium" style={{ color: COR.ink }}>{p.setor}</div>
-                              <div className="mono text-xs" style={{ color: COR.faint }}>{p.ip}</div>
-                            </td>
-                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                              <span className="mono rounded px-2 py-0.5 text-xs" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{p.toner || "—"}</span>
-                            </td>
-                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}><BarraNivel nivel={p.nivel} /></td>
-                            <td className="mono px-3 py-3" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{nf(p.contador)}</td>
-                            <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}><StatusBadge status={statusDe(p)} /></td>
-                          </tr>
-                        ))}
-                        {comNivel.length === 0 && (
-                          <tr><td colSpan={5} className="px-3 py-10 text-center text-sm" style={{ color: COR.faint, background: COR.panel }}>
-                            Nenhuma impressora reportou nível de toner.<br />
-                            <span className="text-xs">Verifique se o leitor.py está coletando a coluna NIVEL_TONER.</span>
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* --- Criticidade por estoque --- */}
-                  <div className="mb-3 flex items-center gap-2 text-xs" style={{ color: COR.sub }}>
-                    <TrendingUp size={14} style={{ color: COR.accent }} /> Criticidade por modelo — saldo em estoque × número de impressoras que dependem dele.
-                  </div>
-                  <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-                    <table className="w-full border-collapse text-sm">
-                      <thead><tr style={{ background: COR.panelAlt }}>
-                        {["Toner", "Saldo", "Impressoras usando", "Criticidade"].map((h, i) => <Th key={i}>{h}</Th>)}
-                      </tr></thead>
-                      <tbody>
-                        {analiseToner.map((a, i) => {
-                          const cor = a.critico ? COR.offline : a.usam.length >= 5 ? COR.erro : COR.online;
-                          const label = a.critico ? "Crítico" : a.usam.length >= 5 ? "Alto" : "Baixo";
-                          return (
-                            <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                              <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                <span className="mono rounded px-2 py-0.5 text-xs" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{a.toner.modelo_toner}</span>
-                                <div className="mt-1 text-xs" style={{ color: COR.faint }}>{a.toner.fabricante}</div>
-                              </td>
-                              <td className="mono px-3 py-3 font-bold" style={{ color: a.saldo <= 2 ? COR.offline : COR.ink, borderBottom: `1px solid ${COR.border}` }}>{a.saldo}</td>
-                              <td className="mono px-3 py-3" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{a.usam.length}</td>
-                              <td className="px-3 py-3" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: cor, background: `${cor}1f`, border: `1px solid ${cor}44` }}>
-                                  {a.critico && <AlertTriangle size={12} />}{label}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {analiseToner.length === 0 && <tr><td colSpan={4} className="px-3 py-10 text-center text-sm" style={{ color: COR.faint, background: COR.panel }}>Sem dados de toner.</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
+              {aba === "vida" && <VidaToner impressoras={impressoras} estoque={estoque} movimentacoes={movimentacoes} />}
 
               {/* MOVIMENTAÇÕES */}
-              {aba === "movimentacoes" && (
-                <>
-                  <div className="mb-3 flex items-center gap-2 text-xs" style={{ color: COR.sub }}>
-                    <Package size={14} style={{ color: COR.accent }} /> Histórico de toners retirados/devolvidos pelo armário via QR code · mais recentes primeiro.
-                  </div>
-                  {movimentacoes.length === 0 ? (
-                    <Aviso>Nenhuma movimentação registrada ainda.<br />As retiradas entram pelo QR code do armário.</Aviso>
-                  ) : (
-                    <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${COR.border}` }}>
-                      <table className="w-full border-collapse text-sm">
-                        <thead><tr style={{ background: COR.panelAlt }}>
-                          {["Data / Hora", "Tipo", "Toner", "Qtd.", "Setor de destino", "Quem retirou"].map((h, i) => <Th key={i}>{h}</Th>)}
-                        </tr></thead>
-                        <tbody>
-                          {movimentacoes.map((m, i) => {
-                            const saida = m.tipo === "saida";
-                            const cor = saida ? COR.erro : m.tipo === "entrada" ? COR.online : COR.sub;
-                            return (
-                              <tr key={i} className="row-hover transition-colors" style={{ background: COR.panel }}>
-                                <td className="mono px-3 py-2.5 whitespace-nowrap" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.data}</td>
-                                <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: cor, background: `${cor}1f`, border: `1px solid ${cor}44` }}>
-                                    {saida ? <ArrowDownCircle size={12} /> : <ArrowUpCircle size={12} />}{saida ? "Saída" : m.tipo === "entrada" ? "Entrada" : m.tipoTexto}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5" style={{ borderBottom: `1px solid ${COR.border}` }}>
-                                  <span className="mono rounded px-2 py-0.5 text-xs" style={{ background: COR.panelAlt, color: COR.accent, border: `1px solid ${COR.border}` }}>{m.toner}</span>
-                                </td>
-                                <td className="mono px-3 py-2.5 font-bold" style={{ color: cor, borderBottom: `1px solid ${COR.border}` }}>
-                                  {saida ? "−" : "+"}{m.quantidade}
-                                </td>
-                                <td className="px-3 py-2.5" style={{ color: COR.ink, borderBottom: `1px solid ${COR.border}` }}>{m.setor || "—"}</td>
-                                <td className="px-3 py-2.5" style={{ color: COR.sub, borderBottom: `1px solid ${COR.border}` }}>{m.quem || "—"}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
+              {aba === "movimentacoes" && <Movimentacoes movimentacoes={movimentacoes} impressoras={impressoras} />}
             </>
           )}
 

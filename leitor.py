@@ -9,6 +9,8 @@ Mudanças desta versão:
   para o dashboard diferenciar de quem respondeu SNMP de verdade.
 - Grava a hora real da coleta na aba "Status Coleta" (o dashboard mostra isso).
 - Ping sem shell=True e só para IPs válidos (evita executar comando digitado na planilha).
+- Grava o nível de toner do dia na aba "Nível Diário" (histórico usado pelo dashboard
+  para prever quando o toner acaba e detectar trocas).
 """
 import asyncio
 import datetime
@@ -29,6 +31,7 @@ NOME_PLANILHA = "Gestão de Estoque TI"
 ABA_MAPEAMENTO = "Mapeamento Impressoras"
 ABA_CONTADORES = "Contadores Diários"
 ABA_STATUS = "Status Coleta"
+ABA_NIVEIS = "Nível Diário"
 
 oid_contador = '1.3.6.1.2.1.43.10.2.1.4.1.1'
 OID_NIVEL_TONER = '1.3.6.1.2.1.43.11.1.1.9.1.1'
@@ -219,17 +222,18 @@ def atualizar_mapeamento(planilha, resultados):
     aba.batch_update(requisicoes, value_input_option="USER_ENTERED")
 
 
-def atualizar_pivo(planilha, resultados, data_str):
+def atualizar_pivo(planilha, resultados, data_str, nome_aba=ABA_CONTADORES, campo="contador"):
     """
-    Grava o contador de hoje em 'Contadores Diários' (uma coluna por dia).
+    Grava o valor de hoje numa aba "pivô" (uma linha por impressora, uma coluna por dia).
+    Usada para 'Contadores Diários' (campo contador) e 'Nível Diário' (campo nivel).
     Regra: só sobrescreve a célula quando há leitura nova. Se a impressora
     está offline agora mas já foi lida hoje, a leitura anterior é mantida.
     """
     COLS_FIXAS = ["Setor", "Nome", "IP", "Marca", "Modelo"]
     try:
-        aba = planilha.worksheet(ABA_CONTADORES)
+        aba = planilha.worksheet(nome_aba)
     except gspread.WorksheetNotFound:
-        aba = planilha.add_worksheet(title=ABA_CONTADORES, rows=200, cols=100)
+        aba = planilha.add_worksheet(title=nome_aba, rows=200, cols=100)
         aba.update(range_name="A1", values=[COLS_FIXAS])
 
     valores = aba.get_all_values() or [COLS_FIXAS]
@@ -266,10 +270,12 @@ def atualizar_pivo(planilha, resultados, data_str):
 
     for r in resultados:
         idx = ip_para_linha[r["ip"]] - 2
-        if r["status"] == STATUS_SNMP and r["contador"] != "":
-            coluna[idx] = [r["contador"]]                   # leitura nova
+        if r["status"] == STATUS_SNMP and r[campo] != "":
+            coluna[idx] = [r[campo]]                        # leitura nova
         elif str(coluna[idx][0]).strip() in ("", STATUS_OFF):
-            coluna[idx] = [STATUS_OFF]                      # nunca lida hoje
+            # nunca lida hoje: no contador marca "Offline"; no nível deixa vazio
+            # (muitas impressoras simplesmente não informam nível)
+            coluna[idx] = [STATUS_OFF if campo == "contador" else ""]
         # senão: mantém a leitura válida anterior do dia
 
     aba.update(range_name=f"{letra_coluna(col_idx + 1)}2", values=coluna, value_input_option="USER_ENTERED")
@@ -325,6 +331,11 @@ def main():
     print("\n✅ STATUS, NIVEL_TONER e ERRO_DETECTADO atualizados")
     atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"))
     print("✅ Contadores gravados em 'Contadores Diários'")
+    try:
+        atualizar_pivo(planilha, resultados, inicio.strftime("%d/%m/%Y"), ABA_NIVEIS, "nivel")
+        print("✅ Nível de toner gravado em 'Nível Diário'")
+    except Exception as e:  # histórico de nível é opcional: não derruba a coleta
+        print(f"⚠️  Não consegui gravar 'Nível Diário': {e}")
     atualizar_status_coleta(planilha, resultados, inicio, duracao)
     print("✅ Hora da coleta gravada em 'Status Coleta'")
 

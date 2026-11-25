@@ -105,12 +105,15 @@ export function useDashboard({ intervalo } = {}) {
   // aba "Status Coleta" é gravada pelo leitor.py novo; se ainda não existir,
   // o dashboard funciona normalmente, só sem o horário real da coleta.
   const colRaw = useAba('coleta', { intervalo, opcional: true });
+  // aba "Nível Diário" (histórico de nível de toner) também é opcional
+  const nivRaw = useAba('niveis', { intervalo, opcional: true });
 
   // useAba sempre devolve array (ver listar/recarregar), então dá para usar direto
   const imp = impRaw.dados;
   const est = estRaw.dados;
   const cnt = cntRaw.dados;
   const col = colRaw.dados;
+  const niv = nivRaw.dados;
 
   const porFamilia = useMemo(() => {
     const m = new Map();
@@ -128,10 +131,17 @@ export function useDashboard({ intervalo } = {}) {
     return m;
   }, [cnt]);
 
+  const nivelPorIp = useMemo(() => {
+    const m = new Map();
+    niv.forEach((n) => m.set(String(n.ip).trim(), n));
+    return m;
+  }, [niv]);
+
   const impressoras = useMemo(
     () =>
       imp.map((p) => {
         const c = porIp.get(String(p.ip).trim());
+        const hn = nivelPorIp.get(String(p.ip).trim());
 
         /* STATUS (coluna F, gravada pelo leitor.py):
            "Online"         -> respondeu SNMP
@@ -169,9 +179,12 @@ export function useDashboard({ intervalo } = {}) {
 
           datas: c ? c.datas : [],
           contadores: c ? c.contadores : [],
+          // histórico diário de nível (aba Nível Diário)
+          nivelDatas: hn ? hn.datas : [],
+          nivelHistorico: hn ? hn.contadores : [],
         };
       }),
-    [imp, porFamilia, porIp]
+    [imp, porFamilia, porIp, nivelPorIp]
   );
 
   const repor = useMemo(
@@ -202,7 +215,7 @@ export function useDashboard({ intervalo } = {}) {
     coleta,
     carregando: impRaw.carregando || estRaw.carregando || cntRaw.carregando,
     erro: impRaw.erro || estRaw.erro || cntRaw.erro,
-    recarregar: () => Promise.all([impRaw.recarregar(), estRaw.recarregar(), cntRaw.recarregar(), colRaw.recarregar()]),
+    recarregar: () => Promise.all([impRaw.recarregar(), estRaw.recarregar(), cntRaw.recarregar(), colRaw.recarregar(), nivRaw.recarregar()]),
   };
 }
 
